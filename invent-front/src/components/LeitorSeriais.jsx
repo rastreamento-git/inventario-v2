@@ -15,7 +15,6 @@ import {
   CheckCheck,
   Keyboard,
   LoaderCircle,
-  HelpCircle,
 } from "lucide-react";
 import { mergeSerials, MAX_BATCH } from "../lib/serials";
 
@@ -55,33 +54,30 @@ async function releaseScanner(scanner, host) {
 function cameraError(error) {
   const name = error?.name || String(error);
   if (/NotAllowed|Permission|denied/i.test(name))
-    return `Permissão negada. Conceda acesso à câmara nas definições do navegador.`;
+    return `Permissão negada. Clique no ícone de cadeado na barra de endereço do navegador e permita a câmera.`;
   if (/NotFound|DevicesNotFound/i.test(name))
-    return `Nenhuma câmara detetada. Ligue uma webcam ou envie uma fotografia.`;
+    return `Nenhuma câmera foi detectada neste computador ou celular.`;
   if (/NotReadable|TrackStart/i.test(name))
-    return `A câmara está ocupada por outra aplicação. Feche outras abas ou programas.`;
+    return `A câmera já está em uso por outro programa ou aba (Meet, Zoom, etc).`;
   if (/Overconstrained|ConstraintNotSatisfied/i.test(name))
-    return `A resolução desta câmara não é suportada. Selecione outra câmara na lista.`;
-  return `Não foi possível abrir a câmara. Verifique as permissões ou envie uma fotografia.`;
+    return `A resolução desta webcam não é suportada. Selecione outra câmera na lista.`;
+  return `Não foi possível abrir a câmera. Verifique as permissões do navegador.`;
 }
 
-// Configuração completa de formatos de etiquetas, IMEIs e QR Codes
 const config = {
   formatsToSupport: [
+    Formats.QR_CODE,
     Formats.CODE_128,
-    Formats.EAN_13,
-    Formats.EAN_8,
     Formats.CODE_39,
     Formats.CODE_93,
+    Formats.EAN_13,
+    Formats.EAN_8,
+    Formats.ITF,
     Formats.UPC_A,
     Formats.UPC_E,
-    Formats.ITF,
-    Formats.QR_CODE,
     Formats.DATA_MATRIX,
   ],
-  experimentalFeatures: {
-    useBarCodeDetectorIfSupported: true,
-  },
+  useBarCodeDetectorIfSupported: false,
   verbose: false,
 };
 
@@ -146,7 +142,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
       oscillator.start();
       oscillator.stop(ctx.currentTime + 0.07);
     } catch {
-      /* Feedback sonoro opcional */
+      /* Som opcional */
     }
   }
 
@@ -185,7 +181,9 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
     let cancelled = false,
       scanner;
     setStatus("starting");
+    setMessage("");
     recent.current = { code: "", at: 0 };
+
     enqueue
       .current(async () => {
         if (cancelled) return;
@@ -196,58 +194,63 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           ) {
             throw new Error("secure-context");
           }
+
           scanner = new Html5Qrcode(cameraId, config);
 
-          // Configuração compatível com telemóvel e webcams de computador (sem min restritivo)
-          const cameraConfig = device
-            ? { deviceId: { exact: device } }
-            : {
-                facingMode: "environment",
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-              };
+          // Obtém câmeras conectadas para preencher o select
+          let currentDevices = devices;
+          try {
+            const available = await Html5Qrcode.getCameras();
+            if (available && available.length) {
+              currentDevices = available;
+              if (!cancelled) setDevices(available);
+            }
+          } catch {
+            /* Permite continuar caso a enumeração prévia falhe */
+          }
 
-          await scanner.start(
-            cameraConfig,
-            {
-              fps: 12, // 12 FPS oferece equilíbrio ideal de processamento sem sobrecarregar a CPU
-              // Área retangular ampla para acomodar códigos de barras longos (Code 128) e QR Codes
-              qrbox: (viewfinderWidth, viewfinderHeight) => {
-                const width = Math.floor(Math.min(viewfinderWidth * 0.9, 450));
-                const height = Math.floor(Math.max(160, Math.min(viewfinderHeight * 0.55, 260)));
-                return { width, height };
-              },
-            },
-            (code) => {
-              if (!cancelled) addRef.current([code], true);
-            },
-            () => {},
-          );
+          // Lista inteligente de tentativas (traseira no celular -> webcam frontal no PC)
+          const targets = [];
+          if (device) {
+            targets.push(device);
+          } else {
+            targets.push({ facingMode: "environment" });
+            targets.push({ facingMode: "user" });
+            if (currentDevices.length > 0) {
+              targets.push(currentDevices[0].id || currentDevices[0].deviceId);
+            }
+          }
+
+          let started = false;
+          let lastError = null;
+
+          for (const target of targets) {
+            if (cancelled) break;
+            try {
+              await scanner.start(
+                target,
+                { fps: 15 },
+                (code) => {
+                  if (!cancelled) addRef.current([code], true);
+                },
+                () => {},
+              );
+              started = true;
+              break;
+            } catch (err) {
+              lastError = err;
+              if (/NotAllowed|Permission|denied/i.test(err?.name || String(err))) {
+                throw err;
+              }
+            }
+          }
+
+          if (!started && lastError) {
+            throw lastError;
+          }
 
           if (cancelled) return;
           setStatus("active");
-
-          // Tenta aplicar focagem contínua por hardware se a câmara suportar
-          try {
-            const videoElement = document.querySelector(`#${cameraId} video`);
-            const track = videoElement?.srcObject?.getVideoTracks?.()[0];
-            const capabilities = track?.getCapabilities?.() || {};
-            if (capabilities.focusMode?.includes("continuous")) {
-              await track.applyConstraints({
-                advanced: [{ focusMode: "continuous" }],
-              });
-            }
-          } catch {
-            /* Focagem automática nativa opcional */
-          }
-
-          navigator.mediaDevices
-            .enumerateDevices()
-            .then((available) => {
-              if (!cancelled)
-                setDevices(available.filter((d) => d.kind === "videoinput"));
-            })
-            .catch(() => {});
         } catch (e) {
           await releaseScanner(scanner).catch(() => {});
           scanner = null;
@@ -255,12 +258,13 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           setStatus("error");
           setMessage(
             e?.message === "secure-context"
-              ? `A câmara requer conexão HTTPS ou localhost.`
+              ? `A câmera requer HTTPS e permissão de acesso no navegador.`
               : cameraError(e),
           );
         }
       })
       .catch(() => {});
+
     return () => {
       cancelled = true;
       enqueue
@@ -320,12 +324,12 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           setLastCode(current.current[0]);
         }
         setMessage(
-          `${added} serial(is) adicionado(s); ${codes.length - added - rejected} repetido(s); ${failures} foto(s) sem leitura; ${rejected} código(s) inválido(s).`,
+          `${added} serial(is) adicionado(s); ${codes.length - added - rejected} repetido(s); ${failures} foto(s) sem leitura; ${rejected} código(s) inválido(s) ou acima do limite do lote.`,
         );
       }
     } catch {
       if (alive())
-        setMessage(`Não foi possível analisar as fotografias. Tente novamente.`);
+        setMessage(`Não foi possível analisar as fotos. Tente novamente.`);
     } finally {
       await releaseScanner(scanner).catch(() => {});
       importing.current = false;
@@ -341,7 +345,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
     e.target.value = "";
     if (!file) return;
     if (file.size > 1024 * 1024) {
-      setMessage(`O ficheiro TXT deve ter até 1 MB.`);
+      setMessage(`O arquivo TXT deve ter até 1 MB.`);
       return;
     }
     const token = generation.current;
@@ -350,7 +354,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
       if (mounted.current && token === generation.current)
         addRef.current(lines);
     } catch {
-      if (mounted.current) setMessage(`Não foi possível ler o ficheiro TXT.`);
+      if (mounted.current) setMessage(`Não foi possível ler o arquivo TXT.`);
     }
   }
 
@@ -384,7 +388,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           }}
         >
           <Camera size={20} />
-          <strong>{camera ? "Fechar câmara" : "Usar câmara / webcam"}</strong>
+          <strong>{camera ? "Fechar câmera" : "Usar câmera / webcam"}</strong>
           <small>Leitura contínua</small>
         </button>
         <button
@@ -398,7 +402,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           ) : (
             <ImagePlus size={20} />
           )}
-          <strong>{busy ? `A analisar ${progress}` : "Enviar fotos"}</strong>
+          <strong>{busy ? `Analisando ${progress}` : "Enviar fotos"}</strong>
           <small>Uma etiqueta por foto</small>
         </button>
         <button
@@ -409,7 +413,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
         >
           <FileText size={20} />
           <strong>Importar lista</strong>
-          <small>Ficheiro TXT</small>
+          <small>Arquivo TXT</small>
         </button>
       </div>
       <input
@@ -433,17 +437,17 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
       />
       <div className="reader-camera" hidden={!camera && status === "idle"}>
         <div className="reader-camera-toolbar">
-          <label htmlFor={`device-${id}`}>Câmara:</label>
+          <label htmlFor={`device-${id}`}>Câmera</label>
           <select
             id={`device-${id}`}
             value={device}
             disabled={status === "starting" && !paused}
             onChange={(e) => setDevice(e.target.value)}
           >
-            <option value="">Automática (traseira ou webcam)</option>
+            <option value="">Automática (traseira no celular / webcam no PC)</option>
             {devices.map((d, index) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || `Câmara ${index + 1}`}
+              <option key={d.id || d.deviceId} value={d.id || d.deviceId}>
+                {d.label || `Câmera ${index + 1}`}
               </option>
             ))}
           </select>
@@ -469,12 +473,12 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
               ) : (
                 <Camera size={28} />
               )}
-              <span>
+              <span className="px-4 text-center">
                 {paused
                   ? "Leitura pausada"
                   : status === "error"
-                    ? "Câmara indisponível"
-                    : "A carregar feed da câmara…"}
+                    ? message || "Câmera indisponível"
+                    : "Aguardando acesso à câmera…"}
               </span>
               {status === "error" && !paused && (
                 <button type="button" onClick={() => setRetry((v) => v + 1)}>
@@ -484,12 +488,9 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
             </div>
           )}
         </div>
-        <div className="reader-camera-tip flex items-center justify-center gap-1.5 text-xs text-slate-500 py-1">
-          <HelpCircle size={14} className="text-teal-600 flex-shrink-0" />
-          <span>
-            <strong>Dica de leitura:</strong> Em webcams, mantenha a etiqueta alinhada a cerca de <strong>15 a 25 cm</strong> da lente para foco nítido e sem reflexos.
-          </span>
-        </div>
+        <p className="reader-camera-tip">
+          Em webcams, mantenha a etiqueta a cerca de 15 a 25 cm da lente para foco nítido e sem reflexos.
+        </p>
       </div>
       <label className="reader-manual-label" htmlFor={`manual-${id}`}>
         <Keyboard size={15} /> Digitar ou usar leitor USB
@@ -526,7 +527,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           </span>
         </div>
       )}
-      {message && (
+      {message && status !== "error" && (
         <p role="status" className="reader-message">
           {message}
         </p>
