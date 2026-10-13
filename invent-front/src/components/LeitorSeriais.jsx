@@ -15,6 +15,7 @@ import {
   CheckCheck,
   Keyboard,
   LoaderCircle,
+  HelpCircle,
 } from "lucide-react";
 import { mergeSerials, MAX_BATCH } from "../lib/serials";
 
@@ -54,16 +55,17 @@ async function releaseScanner(scanner, host) {
 function cameraError(error) {
   const name = error?.name || String(error);
   if (/NotAllowed|Permission|denied/i.test(name))
-    return `Permissão negada. Libere a câmera nas configurações deste site e tente novamente.`;
+    return `Permissão negada. Conceda acesso à câmara nas definições do navegador.`;
   if (/NotFound|DevicesNotFound/i.test(name))
-    return `Nenhuma câmera encontrada. Conecte uma câmera ou importe uma foto.`;
+    return `Nenhuma câmara detetada. Ligue uma webcam ou envie uma fotografia.`;
   if (/NotReadable|TrackStart/i.test(name))
-    return `A câmera está ocupada ou indisponível. Feche os outros aplicativos que a utilizam.`;
+    return `A câmara está ocupada por outra aplicação. Feche outras abas ou programas.`;
   if (/Overconstrained|ConstraintNotSatisfied/i.test(name))
-    return `Essa câmera não está disponível. Selecione outra câmera e tente novamente.`;
-  return `Não foi possível abrir a câmera. Confira as permissões e tente novamente ou importe uma foto.`;
+    return `A resolução desta câmara não é suportada. Selecione outra câmara na lista.`;
+  return `Não foi possível abrir a câmara. Verifique as permissões ou envie uma fotografia.`;
 }
 
+// Configuração completa de formatos de etiquetas, IMEIs e QR Codes
 const config = {
   formatsToSupport: [
     Formats.CODE_128,
@@ -73,11 +75,13 @@ const config = {
     Formats.CODE_93,
     Formats.UPC_A,
     Formats.UPC_E,
+    Formats.ITF,
     Formats.QR_CODE,
     Formats.DATA_MATRIX,
   ],
-  // Ativa o leitor nativo por hardware do smartphone (muito mais rápido e nítido)
-  useBarCodeDetectorIfSupported: true,
+  experimentalFeatures: {
+    useBarCodeDetectorIfSupported: true,
+  },
   verbose: false,
 };
 
@@ -142,7 +146,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
       oscillator.start();
       oscillator.stop(ctx.currentTime + 0.07);
     } catch {
-      /* Som opcional */
+      /* Feedback sonoro opcional */
     }
   }
 
@@ -194,24 +198,25 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           }
           scanner = new Html5Qrcode(cameraId, config);
 
-          // Configuração de câmara com alta resolução e foco dinâmico
+          // Configuração compatível com telemóvel e webcams de computador (sem min restritivo)
           const cameraConfig = device
             ? { deviceId: { exact: device } }
             : {
                 facingMode: "environment",
-                width: { ideal: 1920, min: 1280 },
-                height: { ideal: 1080, min: 720 },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
               };
 
           await scanner.start(
             cameraConfig,
             {
-              fps: 15,
-              // Área retangular focada na largura da etiqueta de código de barras
-              qrbox: (viewfinderWidth, viewfinderHeight) => ({
-                width: Math.floor(viewfinderWidth * 0.85),
-                height: Math.floor(Math.min(viewfinderHeight * 0.5, 220)),
-              }),
+              fps: 12, // 12 FPS oferece equilíbrio ideal de processamento sem sobrecarregar a CPU
+              // Área retangular ampla para acomodar códigos de barras longos (Code 128) e QR Codes
+              qrbox: (viewfinderWidth, viewfinderHeight) => {
+                const width = Math.floor(Math.min(viewfinderWidth * 0.9, 450));
+                const height = Math.floor(Math.max(160, Math.min(viewfinderHeight * 0.55, 260)));
+                return { width, height };
+              },
             },
             (code) => {
               if (!cancelled) addRef.current([code], true);
@@ -221,6 +226,21 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
 
           if (cancelled) return;
           setStatus("active");
+
+          // Tenta aplicar focagem contínua por hardware se a câmara suportar
+          try {
+            const videoElement = document.querySelector(`#${cameraId} video`);
+            const track = videoElement?.srcObject?.getVideoTracks?.()[0];
+            const capabilities = track?.getCapabilities?.() || {};
+            if (capabilities.focusMode?.includes("continuous")) {
+              await track.applyConstraints({
+                advanced: [{ focusMode: "continuous" }],
+              });
+            }
+          } catch {
+            /* Focagem automática nativa opcional */
+          }
+
           navigator.mediaDevices
             .enumerateDevices()
             .then((available) => {
@@ -235,7 +255,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           setStatus("error");
           setMessage(
             e?.message === "secure-context"
-              ? `A câmera requer HTTPS ou localhost e um navegador com acesso à câmera. Você pode importar fotos ou digitar o serial.`
+              ? `A câmara requer conexão HTTPS ou localhost.`
               : cameraError(e),
           );
         }
@@ -300,12 +320,12 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           setLastCode(current.current[0]);
         }
         setMessage(
-          `${added} serial(is) adicionado(s); ${codes.length - added - rejected} repetido(s); ${failures} foto(s) sem leitura; ${rejected} código(s) inválido(s) ou acima do limite do lote.`,
+          `${added} serial(is) adicionado(s); ${codes.length - added - rejected} repetido(s); ${failures} foto(s) sem leitura; ${rejected} código(s) inválido(s).`,
         );
       }
     } catch {
       if (alive())
-        setMessage(`Não foi possível analisar as fotos. Tente novamente.`);
+        setMessage(`Não foi possível analisar as fotografias. Tente novamente.`);
     } finally {
       await releaseScanner(scanner).catch(() => {});
       importing.current = false;
@@ -321,7 +341,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
     e.target.value = "";
     if (!file) return;
     if (file.size > 1024 * 1024) {
-      setMessage(`O arquivo TXT deve ter até 1 MB.`);
+      setMessage(`O ficheiro TXT deve ter até 1 MB.`);
       return;
     }
     const token = generation.current;
@@ -330,7 +350,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
       if (mounted.current && token === generation.current)
         addRef.current(lines);
     } catch {
-      if (mounted.current) setMessage(`Não foi possível ler o arquivo TXT.`);
+      if (mounted.current) setMessage(`Não foi possível ler o ficheiro TXT.`);
     }
   }
 
@@ -364,7 +384,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           }}
         >
           <Camera size={20} />
-          <strong>{camera ? "Fechar câmera" : "Usar câmera"}</strong>
+          <strong>{camera ? "Fechar câmara" : "Usar câmara / webcam"}</strong>
           <small>Leitura contínua</small>
         </button>
         <button
@@ -378,7 +398,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           ) : (
             <ImagePlus size={20} />
           )}
-          <strong>{busy ? `Analisando ${progress}` : "Enviar fotos"}</strong>
+          <strong>{busy ? `A analisar ${progress}` : "Enviar fotos"}</strong>
           <small>Uma etiqueta por foto</small>
         </button>
         <button
@@ -389,7 +409,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
         >
           <FileText size={20} />
           <strong>Importar lista</strong>
-          <small>Arquivo TXT</small>
+          <small>Ficheiro TXT</small>
         </button>
       </div>
       <input
@@ -413,17 +433,17 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
       />
       <div className="reader-camera" hidden={!camera && status === "idle"}>
         <div className="reader-camera-toolbar">
-          <label htmlFor={`device-${id}`}>Câmera</label>
+          <label htmlFor={`device-${id}`}>Câmara:</label>
           <select
             id={`device-${id}`}
             value={device}
             disabled={status === "starting" && !paused}
             onChange={(e) => setDevice(e.target.value)}
           >
-            <option value="">Automática (preferir traseira)</option>
+            <option value="">Automática (traseira ou webcam)</option>
             {devices.map((d, index) => (
               <option key={d.deviceId} value={d.deviceId}>
-                {d.label || `Câmera ${index + 1}`}
+                {d.label || `Câmara ${index + 1}`}
               </option>
             ))}
           </select>
@@ -453,8 +473,8 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
                 {paused
                   ? "Leitura pausada"
                   : status === "error"
-                    ? "Câmera indisponível"
-                    : "Aguardando acesso à câmera…"}
+                    ? "Câmara indisponível"
+                    : "A carregar feed da câmara…"}
               </span>
               {status === "error" && !paused && (
                 <button type="button" onClick={() => setRetry((v) => v + 1)}>
@@ -464,9 +484,12 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
             </div>
           )}
         </div>
-        <p className="reader-camera-tip">
-          Mantenha a etiqueta alinhada dentro do quadro com boa iluminação.
-        </p>
+        <div className="reader-camera-tip flex items-center justify-center gap-1.5 text-xs text-slate-500 py-1">
+          <HelpCircle size={14} className="text-teal-600 flex-shrink-0" />
+          <span>
+            <strong>Dica de leitura:</strong> Em webcams, mantenha a etiqueta alinhada a cerca de <strong>15 a 25 cm</strong> da lente para foco nítido e sem reflexos.
+          </span>
+        </div>
       </div>
       <label className="reader-manual-label" htmlFor={`manual-${id}`}>
         <Keyboard size={15} /> Digitar ou usar leitor USB
