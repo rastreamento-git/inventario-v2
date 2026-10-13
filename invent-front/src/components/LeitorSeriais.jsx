@@ -66,19 +66,18 @@ function cameraError(error) {
 
 const config = {
   formatsToSupport: [
-    Formats.QR_CODE,
     Formats.CODE_128,
-    Formats.CODE_39,
-    Formats.CODE_93,
     Formats.EAN_13,
     Formats.EAN_8,
-    Formats.ITF,
+    Formats.CODE_39,
+    Formats.CODE_93,
     Formats.UPC_A,
     Formats.UPC_E,
+    Formats.QR_CODE,
     Formats.DATA_MATRIX,
-    Formats.PDF_417,
   ],
-  useBarCodeDetectorIfSupported: false,
+  // Ativa o leitor nativo por hardware do smartphone (muito mais rápido e nítido)
+  useBarCodeDetectorIfSupported: true,
   verbose: false,
 };
 
@@ -194,14 +193,32 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
             throw new Error("secure-context");
           }
           scanner = new Html5Qrcode(cameraId, config);
+
+          // Configuração de câmara com alta resolução e foco dinâmico
+          const cameraConfig = device
+            ? { deviceId: { exact: device } }
+            : {
+                facingMode: "environment",
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 },
+              };
+
           await scanner.start(
-            device || { facingMode: "environment" },
-            { fps: 10 },
+            cameraConfig,
+            {
+              fps: 15,
+              // Área retangular focada na largura da etiqueta de código de barras
+              qrbox: (viewfinderWidth, viewfinderHeight) => ({
+                width: Math.floor(viewfinderWidth * 0.85),
+                height: Math.floor(Math.min(viewfinderHeight * 0.5, 220)),
+              }),
+            },
             (code) => {
               if (!cancelled) addRef.current([code], true);
             },
             () => {},
           );
+
           if (cancelled) return;
           setStatus("active");
           navigator.mediaDevices
@@ -448,8 +465,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           )}
         </div>
         <p className="reader-camera-tip">
-          Mantenha a etiqueta inteira visível, com boa iluminação e sem
-          reflexos.
+          Mantenha a etiqueta alinhada dentro do quadro com boa iluminação.
         </p>
       </div>
       <label className="reader-manual-label" htmlFor={`manual-${id}`}>
