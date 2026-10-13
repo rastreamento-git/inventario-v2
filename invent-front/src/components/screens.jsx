@@ -821,12 +821,19 @@ export function TelaEstorno({
 // ==========================================
 // TELA RASTREIO (COM BUSCA GLOBAL)
 // ==========================================
-export function TelaRastreioTriagem({ imeisGlobais, reload }) {
+export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }) {
   const [seriaisRecebidos, setSeriaisRecebidos] = useState([]);
   const [filtroStatus, setFiltroStatus] = useState("TODOS");
+  const [filtroTipo, setFiltroTipo] = useState("TODOS");
   const [busca, setBusca] = useState("");
   const [historico, setHistorico] = useState(null);
   const [archivedItems, setArchivedItems] = useState(null);
+  
+  // Estado para o modal de reclassificação/mover
+  const [itemParaMover, setItemParaMover] = useState(null);
+  const [novoProdutoId, setNovoProdutoId] = useState("");
+  const [salvandoMudanca, setSalvandoMudanca] = useState(false);
+
   async function loadArchived() {
     try {
       const { data } = await api.get("/imeis", {
@@ -837,6 +844,7 @@ export function TelaRastreioTriagem({ imeisGlobais, reload }) {
       alert(errorMessage(err));
     }
   }
+
   async function showHistory(code) {
     try {
       const { data } = await api.get(
@@ -847,6 +855,7 @@ export function TelaRastreioTriagem({ imeisGlobais, reload }) {
       alert(errorMessage(err));
     }
   }
+
   useEffect(() => {
     setArchivedItems(null);
   }, [imeisGlobais]);
@@ -862,20 +871,7 @@ export function TelaRastreioTriagem({ imeisGlobais, reload }) {
       alert(errorMessage(err));
     }
   };
-  const avaliar = async (codigo_serial, produto_id, aprovado) => {
-    if (!window.confirm(aprovado ? "Aprovar reuso?" : "Mandar para sucata?"))
-      return;
-    try {
-      await api.post("/triagem/avaliar", {
-        codigo_serial,
-        produto_id,
-        aprovado,
-      });
-      await reload();
-    } catch (err) {
-      alert(errorMessage(err));
-    }
-  };
+
   const limparAntigos = async () => {
     if (
       !window.confirm(
@@ -892,16 +888,118 @@ export function TelaRastreioTriagem({ imeisGlobais, reload }) {
     }
   };
 
-  const imeisFiltrados = (archivedItems || imeisGlobais)
-    .filter((i) => filtroStatus === "TODOS" || i.status === filtroStatus)
-    .filter(
-      (i) =>
-        i.codigo_serial.toLowerCase().includes(busca.toLowerCase()) ||
-        (i.produto && i.produto.toLowerCase().includes(busca.toLowerCase())),
-    );
+  // Salvar a mudança de modelo/tipo do equipamento
+  const salvarReclassificacao = async (e) => {
+    e.preventDefault();
+    if (!novoProdutoId) {
+      alert("Selecione o novo modelo de equipamento.");
+      return;
+    }
+    setSalvandoMudanca(true);
+    try {
+      await api.put(`/imeis/${encodeURIComponent(itemParaMover.codigo_serial)}`, {
+        produto_id: Number(novoProdutoId),
+      });
+      alert(`Equipamento ${itemParaMover.codigo_serial} movido com sucesso!`);
+      setItemParaMover(null);
+      setNovoProdutoId("");
+      await reload();
+    } catch (err) {
+      alert(errorMessage(err));
+    } finally {
+      setSalvandoMudanca(false);
+    }
+  };
+
+  // Filtro Inteligente: avalia termo de busca em serial, produto, categoria e registros sem tipo
+  const termo = busca.trim().toLowerCase();
+  const baseItens = archivedItems || imeisGlobais;
+
+  const imeisFiltrados = baseItens.filter((i) => {
+    // 1. Filtro por status
+    if (filtroStatus !== "TODOS" && i.status !== filtroStatus) return false;
+
+    // 2. Filtro por tipo/categoria
+    const categoriaNormalizada = (i.categoria || i.tipo || "SEM_TIPO").toUpperCase();
+    if (filtroTipo === "SEM_TIPO" && categoriaNormalizada !== "SEM_TIPO") return false;
+    if (filtroTipo !== "TODOS" && filtroTipo !== "SEM_TIPO" && categoriaNormalizada !== filtroTipo) return false;
+
+    // 3. Busca por texto (abrange NT-40, modelo, serial e itens sem tipo)
+    if (!termo) return true;
+
+    const serialMatch = String(i.codigo_serial || "").toLowerCase().includes(termo);
+    const produtoMatch = String(i.produto || i.nome || "").toLowerCase().includes(termo);
+    const modeloMatch = String(i.modelo || "").toLowerCase().includes(termo);
+    const categoriaMatch = String(i.categoria || i.tipo || "sem tipo").toLowerCase().includes(termo);
+
+    return serialMatch || produtoMatch || modeloMatch || categoriaMatch;
+  });
 
   return (
     <div className="space-y-8">
+      {/* Modal para Mover / Corrigir Tipo e Modelo */}
+      {itemParaMover && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">
+              Mover / Corrigir Equipamento
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Altere o modelo e categoria associados ao serial <strong className="font-mono text-teal-700">{itemParaMover.codigo_serial}</strong>.
+            </p>
+
+            <form onSubmit={salvarReclassificacao} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Modelo Atual:
+                </label>
+                <div className="p-2.5 bg-gray-50 border rounded-lg text-sm text-gray-700">
+                  [{itemParaMover.categoria || "SEM TIPO"}] {itemParaMover.produto || "Não definido"}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Novo Modelo e Categoria de Destino:
+                </label>
+                <select
+                  required
+                  className="w-full p-2.5 border rounded-lg text-sm font-medium bg-white"
+                  value={novoProdutoId}
+                  onChange={(e) => setNovoProdutoId(e.target.value)}
+                >
+                  <option value="">Selecione o modelo correto…</option>
+                  {produtos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      [{p.categoria || "RASTREADOR"}] {p.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  className="px-4 py-2 border rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                  onClick={() => setItemParaMover(null)}
+                  disabled={salvandoMudanca}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoMudanca || !novoProdutoId}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition"
+                >
+                  {salvandoMudanca ? "Salvando…" : "Confirmar Alteração"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Histórico do serial */}
       {historico && (
         <section className="bg-white border rounded-xl p-6">
           <div className="flex justify-between mb-4">
@@ -922,14 +1020,10 @@ export function TelaRastreioTriagem({ imeisGlobais, reload }) {
               </li>
             ))}
           </ul>
-          {!historico.events.length && (
-            <p className="text-sm text-gray-500">
-              Sem eventos por serial. Registros anteriores à atualização possuem
-              somente o histórico geral.
-            </p>
-          )}
         </section>
       )}
+
+      {/* Painel Superior de Triagem */}
       <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center">
@@ -953,12 +1047,19 @@ export function TelaRastreioTriagem({ imeisGlobais, reload }) {
         />
       </div>
 
+      {/* Tabela de Rastreabilidade com Filtros Tolerantes */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-6 border-b border-gray-100 bg-slate-50 flex justify-between items-center flex-wrap gap-4">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center">
-            <Search className="mr-2" /> Rastreabilidade Global
-          </h2>
-          <div className="flex items-center gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800 flex items-center">
+              <Search className="mr-2" /> Rastreabilidade Global
+            </h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Total de registros exibidos: <strong>{imeisFiltrados.length}</strong>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="relative w-64">
               <Search
                 className="absolute left-3 top-2.5 text-gray-400"
@@ -966,116 +1067,135 @@ export function TelaRastreioTriagem({ imeisGlobais, reload }) {
               />
               <input
                 type="text"
-                placeholder="Buscar IMEI ou Modelo..."
-                className="w-full pl-9 p-2 border border-gray-300 rounded-md text-sm outline-none"
+                placeholder="Buscar NT-40, IMEI, Modelo..."
+                className="w-full pl-9 p-2 border border-gray-300 rounded-md text-sm outline-none bg-white"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
               />
             </div>
+
             <select
-              className="p-2 border rounded-md font-bold text-sm"
+              className="p-2 border rounded-md font-bold text-sm bg-white"
+              value={filtroTipo}
+              onChange={(e) => setFiltroTipo(e.target.value)}
+            >
+              <option value="TODOS">Todos os Tipos</option>
+              <option value="RASTREADOR">Rastreadores</option>
+              <option value="TAG">Tags</option>
+              <option value="SEM_TIPO">Sem Tipo Definido</option>
+            </select>
+
+            <select
+              className="p-2 border rounded-md font-bold text-sm bg-white"
               value={filtroStatus}
               onChange={(e) => setFiltroStatus(e.target.value)}
             >
-              <option value="TODOS">Ver Todos os Status</option>
+              <option value="TODOS">Todos os Status</option>
               <option value="MATRIZ">Matriz</option>
               <option value="TECNICO">Com Técnico</option>
               <option value="INSTALADO">Instalados</option>
               <option value="TRIAGEM">Na Triagem</option>
               <option value="SUCATA">Sucata</option>
             </select>
+
             <button
               onClick={() =>
                 archivedItems ? setArchivedItems(null) : loadArchived()
               }
-              className="text-sm border px-4 py-2 rounded-md"
+              className="text-sm border px-3 py-2 rounded-md bg-white hover:bg-gray-50"
             >
               {archivedItems ? "Ocultar arquivados" : "Incluir arquivados"}
             </button>
             <button
               onClick={limparAntigos}
-              className="text-sm bg-white border px-4 py-2 rounded-md hover:bg-gray-100"
+              className="text-sm bg-white border px-3 py-2 rounded-md hover:bg-gray-100"
             >
               Arquivar (+30 dias)
             </button>
           </div>
         </div>
+
         <div className="overflow-x-auto max-h-[500px]">
           <table className="w-full text-left whitespace-nowrap">
             <thead className="sticky top-0 bg-gray-100 shadow-sm">
               <tr className="text-gray-600 text-sm">
-                <th className="p-4">IMEI / QR</th>
-                <th className="p-4">Equipamento</th>
+                <th className="p-4">IMEI / Serial</th>
+                <th className="p-4">Modelo e Tipo</th>
                 <th className="p-4">Status</th>
                 <th className="p-4">Atualização</th>
                 <th className="p-4 text-center">Ações</th>
               </tr>
             </thead>
             <tbody>
-              {imeisFiltrados.map((i) => (
-                <tr
-                  key={i.codigo_serial}
-                  className="border-b text-sm hover:bg-gray-50"
-                >
-                  <td className="p-4 font-mono font-bold text-blue-600">
-                    <button
-                      onClick={() => showHistory(i.codigo_serial)}
-                      className="underline"
-                      title="Ver histórico do serial"
-                    >
-                      {i.codigo_serial}
-                    </button>
-                    {i.arquivado && (
-                      <span className="ml-2 text-xs text-gray-500">
-                        Arquivado
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4 font-medium">
-                    [{i.categoria || "EQUIP"}] {i.produto}
-                  </td>
-                  <td className="p-4">
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-bold ${i.status === "MATRIZ" ? "bg-blue-100 text-blue-800" : i.status === "INSTALADO" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}
-                    >
-                      {i.status}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    {new Date(i.data_atualizacao).toLocaleString("pt-BR")}
-                  </td>
-                  <td className="p-4 text-center">
-                    {i.status === "TRIAGEM" ? (
-                      <div className="flex justify-center gap-2">
-                        <button
-                          onClick={() =>
-                            avaliar(i.codigo_serial, i.produto_id, true)
-                          }
-                          className="bg-green-100 text-green-700 px-3 py-1 rounded"
-                        >
-                          Aprovar Reuso
-                        </button>
-                        <button
-                          onClick={() =>
-                            avaliar(i.codigo_serial, i.produto_id, false)
-                          }
-                          className="bg-red-100 text-red-700 px-3 py-1 rounded"
-                        >
-                          Sucata
-                        </button>
-                      </div>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {imeisFiltrados.length === 0 && (
+              {imeisFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-4 text-center text-gray-500">
-                    Nenhum registro encontrado.
+                  <td colSpan={5} className="p-8 text-center text-gray-500 text-sm">
+                    Nenhum equipamento encontrado para o filtro "{busca || filtroTipo}".
                   </td>
                 </tr>
+              ) : (
+                imeisFiltrados.map((i) => (
+                  <tr
+                    key={i.codigo_serial}
+                    className="border-b text-sm hover:bg-gray-50"
+                  >
+                    <td className="p-4 font-mono font-bold text-blue-600">
+                      <button
+                        onClick={() => showHistory(i.codigo_serial)}
+                        className="underline"
+                        title="Ver histórico do serial"
+                      >
+                        {i.codigo_serial}
+                      </button>
+                      {i.arquivado && (
+                        <span className="ml-2 text-xs text-gray-500">
+                          Arquivado
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4 font-medium">
+                      <span className={`inline-block mr-2 px-1.5 py-0.5 rounded text-xs font-bold ${
+                        !i.categoria && !i.tipo
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-slate-100 text-slate-700"
+                      }`}>
+                        {i.categoria || i.tipo || "SEM TIPO"}
+                      </span>
+                      {i.produto || <span className="text-gray-400 italic">Modelo não definido</span>}
+                    </td>
+                    <td className="p-4">
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-bold ${
+                          i.status === "MATRIZ"
+                            ? "bg-blue-100 text-blue-800"
+                            : i.status === "INSTALADO"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {i.status}
+                      </span>
+                    </td>
+                    <td className="p-4 text-xs text-gray-500">
+                      {i.atualizado_em
+                        ? new Date(i.atualizado_em).toLocaleDateString("pt-BR")
+                        : "—"}
+                    </td>
+                    <td className="p-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setItemParaMover(i);
+                          setNovoProdutoId(i.produto_id ? String(i.produto_id) : "");
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition"
+                        title="Mover para outro modelo ou corrigir tipo"
+                      >
+                        Mover / Corrigir
+                      </button>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -1084,7 +1204,6 @@ export function TelaRastreioTriagem({ imeisGlobais, reload }) {
     </div>
   );
 }
-
 export function TelaCompras({ previsao, produtos }) {
   const listaCompras = groupForecast(previsao, produtos);
 
