@@ -1,480 +1,1282 @@
 import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  lazy,
-  Suspense,
+  lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
+import {
+  Activity, AlertTriangle, Bell, BellOff, Box, ChevronRight,
+  ClipboardList, LayoutDashboard, LogOut, Menu, PackagePlus,
+  RefreshCw, Search, Settings, ShoppingCart, Truck, Undo2,
+  UserPlus, Wrench, X,
+} from "lucide-react";
 import { api, errorMessage, saveToken } from "./lib/api";
 import {
-  TelaEntrada,
-  TelaTransferencia,
-  TelaInstalacao,
-  TelaEstorno,
-  TelaRastreioTriagem,
-  TelaEquipamentos,
-  TelaCompras,
-  TelaTecnicos,
-  TelaLogs,
-  TelaConfiguracao,
+  TelaEntrada, TelaTransferencia, TelaInstalacao, TelaEstorno,
+  TelaRastreioTriagem, TelaEquipamentos, TelaCompras,
+  TelaTecnicos, TelaLogs, TelaConfiguracao,
 } from "./components/screens";
-const TelaDashboard = lazy(() => import("./components/Dashboard"));
-import {
-  LayoutDashboard,
-  PackagePlus,
-  Truck,
-  Settings,
-  AlertTriangle,
-  Wrench,
-  ClipboardList,
-  ShoppingCart,
-  UserPlus,
-  Undo2,
-  X,
-  Search,
-  Menu,
-  Box,
-} from "lucide-react";
+
+const Dashboard = lazy(() => import("./components/Dashboard"));
+
+const groups = [
+  {
+    label: "Visão geral",
+    items: [
+      ["dashboard", "Dashboard", LayoutDashboard],
+    ],
+  },
+  {
+    label: "Movimentações",
+    items: [
+      ["entrada", "Entrada na matriz", PackagePlus],
+      ["transferencia", "Carga para técnico", Truck],
+      ["instalacao", "Instalações", Wrench],
+      ["estorno", "Devoluções e estornos", Undo2],
+      ["rastreio", "IMEIs e triagem", Search],
+    ],
+  },
+  {
+    label: "Gestão",
+    items: [
+      ["equipamentos", "Equipamentos", Box],
+      ["compras", "Previsão de compras", ShoppingCart],
+      ["tecnicos", "Equipe técnica", UserPlus],
+      ["logs", "Histórico", ClipboardList],
+      ["config", "Configurações", Settings],
+    ],
+  },
+];
+
+const preferenceKey = "invent.notifications.enabled";
+
+const permission = () =>
+  typeof Notification === "undefined"
+    ? "unsupported"
+    : Notification.permission;
+
+function remember(enabled) {
+  try {
+    localStorage.setItem(preferenceKey, String(enabled));
+  } catch {
+    // Mantém a preferência apenas durante esta sessão.
+  }
+}
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [menuAberto, setMenuAberto] = useState(false);
-  const [produtos, setProdutos] = useState([]);
-  const [tecnicos, setTecnicos] = useState([]);
-  const [estoqueTecnicos, setEstoqueTecnicos] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [previsao, setPrevisao] = useState([]);
-  const [dashboard, setDashboard] = useState({
-    kpis: {},
-    grafico: [],
+  const [tab, setTab] = useState("dashboard");
+  const [menu, setMenu] = useState(false);
+  const [data, setData] = useState({
+    produtos: [],
     tecnicos: [],
+    estoque: [],
+    logs: [],
+    previsao: [],
+    imeis: [],
+    dashboard: { kpis: {}, grafico: [], tecnicos: [] },
   });
-  const [imeisGlobais, setImeisGlobais] = useState([]);
-
-  const notificadoRef = useRef(new Set());
-  const refreshId = useRef(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [loadError, setLoadError] = useState("");
-  const [lastUpdated, setLastUpdated] = useState(null);
-  useEffect(() => {
-    const listener = (event) => setBusy(event.detail);
-    window.addEventListener("invent:busy", listener);
-    return () => window.removeEventListener("invent:busy", listener);
-  }, []);
+  const [error, setError] = useState("");
+  const [updated, setUpdated] = useState(null);
+  const [notice, setNotice] = useState("");
+  const [notifyPermission, setNotifyPermission] = useState(permission);
+  const [notifyEnabled, setNotifyEnabled] = useState(() => {
+    try {
+      return localStorage.getItem(preferenceKey) !== "false";
+    } catch {
+      return true;
+    }
+  });
 
-  const fetchData = useCallback(async () => {
-    const requestId = ++refreshId.current;
+  const requestId = useRef(0);
+  const notified = useRef(new Set());
+
+  const title = groups
+    .flatMap(group => group.items)
+    .find(item => item[0] === tab)?.[1];
+
+  const notificationsOn =
+    notifyEnabled && notifyPermission === "granted";
+
+  const reload = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
+
     try {
+      const paths = [
+        "produtos", "tecnicos", "estoque-tecnicos", "logs",
+        "previsao-compras", "imeis", "dashboard",
+      ];
+
+      const responses = await Promise.all(
+        paths.map(path => api.get(`/${path}`)),
+      );
+
+      if (id !== requestId.current) return;
+
       const [
-        prodRes,
-        techRes,
-        dashRes,
-        estTechRes,
-        logsRes,
-        prevRes,
-        imeisRes,
-      ] = await Promise.all([
-        api.get("/produtos"),
-        api.get("/tecnicos"),
-        api.get("/dashboard"),
-        api.get("/estoque-tecnicos"),
-        api.get("/logs"),
-        api.get("/previsao-compras"),
-        api.get("/imeis"),
-      ]);
-      if (requestId !== refreshId.current) return;
-      setLoadError("");
-      setLastUpdated(new Date());
-      setProdutos(prodRes.data);
-      setTecnicos(techRes.data);
-      setDashboard(dashRes.data);
-      setEstoqueTecnicos(estTechRes.data);
-      setLogs(logsRes.data);
-      setPrevisao(prevRes.data);
-      setImeisGlobais(imeisRes.data);
-    } catch (error) {
-      if (requestId === refreshId.current) setLoadError(errorMessage(error));
+        produtos, tecnicos, estoque, logs, previsao, imeis, dashboard,
+      ] = responses.map(response => response.data);
+
+      setData({
+        produtos, tecnicos, estoque, logs, previsao, imeis, dashboard,
+      });
+      setUpdated(new Date());
+      setError("");
+    } catch (e) {
+      if (id === requestId.current) setError(errorMessage(e));
     } finally {
-      if (requestId === refreshId.current) setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
-    return () => {
-      refreshId.current++;
-    };
-  }, [fetchData]);
-
-  const categoriasMatriz = {};
-  produtos.forEach((p) => {
-    const cat = p.categoria || "RASTREADOR";
-    if (!categoriasMatriz[cat])
-      categoriasMatriz[cat] = { quantidade: 0, minimo: p.estoque_minimo };
-    categoriasMatriz[cat].quantidade += Number(p.quantidade_matriz);
-    categoriasMatriz[cat].minimo = Math.max(
-      categoriasMatriz[cat].minimo,
-      p.estoque_minimo,
-    );
-  });
-
-  const alertasMatriz = Object.keys(categoriasMatriz)
-    .filter(
-      (cat) => categoriasMatriz[cat].quantidade <= categoriasMatriz[cat].minimo,
-    )
-    .map((cat) => ({
-      categoria: cat,
-      quantidade: categoriasMatriz[cat].quantidade,
-      minimo: categoriasMatriz[cat].minimo,
-    }));
-
-  const categoriasTecnicos = {};
-  tecnicos.forEach((t) =>
-    Object.keys(categoriasMatriz).forEach((categoria) => {
-      categoriasTecnicos[`${t.id}-${categoria}`] = {
-        tecnico_id: t.id,
-        tecnico_nome: t.nome,
-        categoria,
-        quantidade: 0,
-        minimo: t.estoque_minimo,
-      };
-    }),
-  );
-  estoqueTecnicos.forEach((et) => {
-    const cat = et.categoria || "RASTREADOR";
-    const key = `${et.tecnico_id}-${cat}`;
-    if (!categoriasTecnicos[key]) {
-      categoriasTecnicos[key] = {
-        tecnico_id: et.tecnico_id,
-        tecnico_nome: et.tecnico_nome,
-        categoria: cat,
-        quantidade: 0,
-        minimo: et.estoque_minimo,
-      };
-    }
-    categoriasTecnicos[key].quantidade += Number(et.quantidade);
-  });
-
-  const alertasTecnicos = Object.values(categoriasTecnicos).filter(
-    (ct) => ct.quantidade <= ct.minimo,
-  );
+    reload();
+    return () => { requestId.current++; };
+  }, [reload]);
 
   useEffect(() => {
-    if (
-      typeof Notification !== "undefined" &&
-      Notification.permission === "granted"
-    ) {
-      alertasMatriz.forEach((a) => {
-        const key = `matriz-${a.categoria}-${a.quantidade}`;
-        if (!notificadoRef.current.has(key)) {
-          try {
-            new Notification("Alerta Matriz", {
-              body: `Categoria ${a.categoria}: ${a.quantidade} restantes.`,
-            });
-          } catch {
-            /* use in-app alerts */
-          }
-          notificadoRef.current.add(key);
-        }
-      });
-      alertasTecnicos.forEach((a) => {
-        const key = `tec-${a.tecnico_id}-${a.categoria}-${a.quantidade}`;
-        if (!notificadoRef.current.has(key)) {
-          try {
-            new Notification("Alerta Técnico", {
-              body: `${a.tecnico_nome}: ${a.quantidade} unidades de ${a.categoria}.`,
-            });
-          } catch {
-            /* use in-app alerts */
-          }
-          notificadoRef.current.add(key);
-        }
-      });
-    }
-  }, [produtos, tecnicos, estoqueTecnicos]);
+    const onBusy = event => setBusy(event.detail);
+    const onFocus = () => setNotifyPermission(permission());
 
-  async function enableNotifications() {
-    if (typeof Notification === "undefined")
-      return alert(
-        "Este navegador não oferece notificações. Os avisos continuam disponíveis no painel.",
+    window.addEventListener("invent:busy", onBusy);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      window.removeEventListener("invent:busy", onBusy);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    const escape = event => {
+      if (event.key === "Escape") setMenu(false);
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, []);
+
+  const alerts = useMemo(() => {
+    const categories = new Map();
+    const team = new Map();
+
+    data.produtos.forEach(p => {
+      const category = p.categoria || "RASTREADOR";
+      const current = categories.get(category) || {
+        quantidade: 0,
+        minimo: 0,
+      };
+
+      current.quantidade += Number(p.quantidade_matriz || 0);
+      current.minimo = Math.max(
+        current.minimo,
+        Number(p.estoque_minimo || 0),
       );
+      categories.set(category, current);
+    });
+
+    data.tecnicos.forEach(t => {
+      categories.forEach((_, category) => {
+        team.set(`${t.id}-${category}`, {
+          nome: t.nome,
+          categoria: category,
+          quantidade: 0,
+          minimo: Number(t.estoque_minimo || 0),
+        });
+      });
+    });
+
+    data.estoque.forEach(item => {
+      const category = item.categoria || "RASTREADOR";
+      const key = `${item.tecnico_id}-${category}`;
+
+      if (team.has(key)) {
+        team.get(key).quantidade += Number(item.quantidade || 0);
+      }
+    });
+
+    const result = [];
+
+    categories.forEach((item, category) => {
+      if (item.quantidade <= item.minimo) {
+        result.push({
+          key: `matriz-${category}`,
+          nome: "Matriz",
+          categoria: category,
+          ...item,
+        });
+      }
+    });
+
+    team.forEach((item, key) => {
+      if (item.quantidade <= item.minimo) {
+        result.push({ key, ...item });
+      }
+    });
+
+    return result;
+  }, [data.produtos, data.tecnicos, data.estoque]);
+
+  useEffect(() => {
+    if (!notificationsOn || loading || error) return;
+
+    const key = item =>
+      `${item.key}:${item.quantidade}:${item.minimo}`;
+
+    const fresh = alerts.filter(
+      item => !notified.current.has(key(item)),
+    );
+
+    notified.current = new Set(alerts.map(key));
+
+    if (!fresh.length) return;
+
     try {
-      const permission = await Notification.requestPermission();
-      alert(
-        permission === "granted"
-          ? "Notificações ativadas. Os próximos alertas serão exibidos pelo navegador."
-          : "Notificações não autorizadas. Confira as permissões do site.",
+      const first = fresh[0];
+
+      new Notification("Estoque precisa de atenção", {
+        body:
+          `${first.nome} · ${first.categoria}: ` +
+          `${first.quantidade} unidade(s).` +
+          (fresh.length > 1
+            ? ` E mais ${fresh.length - 1} alerta(s).`
+            : ""),
+        tag: "invent-stock",
+      });
+    } catch {
+      // Os alertas continuam disponíveis na interface.
+    }
+  }, [alerts, notificationsOn, loading, error]);
+
+  async function toggleNotifications() {
+    const current = permission();
+    setNotifyPermission(current);
+
+    if (current === "unsupported") return;
+
+    if (current === "denied") {
+      setNotice(
+        "As notificações estão bloqueadas. Libere a permissão " +
+        "nas configurações deste site no navegador.",
+      );
+      return;
+    }
+
+    if (current === "granted") {
+      const enabled = !notificationsOn;
+      setNotifyEnabled(enabled);
+      remember(enabled);
+
+      if (enabled) notified.current.clear();
+
+      setNotice(
+        enabled
+          ? "Notificações ativadas."
+          : "Notificações sil
+
+Substitua o conteúdo completo destes **três arquivos** no frontend.
+
+**`invent-front/src/App.jsx`**
+
+```jsx
+import {
+  lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState,
+} from "react";
+import {
+  Activity, Bell, BellOff, Box, ChevronRight, ClipboardList,
+  LayoutDashboard, LogOut, Menu, PackagePlus, RefreshCw, Search,
+  Settings, ShoppingCart, Truck, Undo2, UserPlus, Wrench, X,
+  AlertTriangle,
+} from "lucide-react";
+import { api, errorMessage, saveToken } from "./lib/api";
+import {
+  TelaEntrada, TelaTransferencia, TelaInstalacao, TelaEstorno,
+  TelaRastreioTriagem, TelaEquipamentos, TelaCompras, TelaTecnicos,
+  TelaLogs, TelaConfiguracao,
+} from "./components/screens";
+
+const Dashboard = lazy(() => import("./components/Dashboard"));
+
+const groups = [
+  {
+    label: "Visão geral",
+    items: [["dashboard", "Dashboard", LayoutDashboard]],
+  },
+  {
+    label: "Movimentações",
+    items: [
+      ["entrada", "Entrada na matriz", PackagePlus],
+      ["transferencia", "Carga para técnico", Truck],
+      ["instalacao", "Instalações", Wrench],
+      ["estorno", "Devoluções e estornos", Undo2],
+      ["rastreio", "IMEIs e triagem", Search],
+    ],
+  },
+  {
+    label: "Gestão",
+    items: [
+      ["equipamentos", "Equipamentos", Box],
+      ["compras", "Previsão de compras", ShoppingCart],
+      ["tecnicos", "Equipe técnica", UserPlus],
+      ["logs", "Histórico", ClipboardList],
+      ["config", "Configurações", Settings],
+    ],
+  },
+];
+
+const preferenceKey = "invent.notifications.enabled";
+
+const permission = () =>
+  typeof Notification === "undefined"
+    ? "unsupported"
+    : Notification.permission;
+
+function remember(enabled) {
+  try {
+    localStorage.setItem(preferenceKey, String(enabled));
+  } catch {
+    // A preferência continua disponível durante esta sessão.
+  }
+}
+
+export default function App() {
+  const [tab, setTab] = useState("dashboard");
+  const [menu, setMenu] = useState(false);
+  const [data, setData] = useState({
+    produtos: [],
+    tecnicos: [],
+    estoque: [],
+    logs: [],
+    previsao: [],
+    imeis: [],
+    dashboard: { kpis: {}, grafico: [], tecnicos: [] },
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [updated, setUpdated] = useState(null);
+  const [notice, setNotice] = useState("");
+  const [notifyPermission, setNotifyPermission] = useState(permission);
+
+  const [notifyEnabled, setNotifyEnabled] = useState(() => {
+    try {
+      return localStorage.getItem(preferenceKey) !== "false";
+    } catch {
+      return true;
+    }
+  });
+
+  const requestId = useRef(0);
+  const notified = useRef(new Set());
+
+  const title = groups
+    .flatMap(group => group.items)
+    .find(item => item[0] === tab)?.[1];
+
+  const notificationsOn =
+    notifyEnabled && notifyPermission === "granted";
+
+  const reload = useCallback(async () => {
+    const id = ++requestId.current;
+    setLoading(true);
+
+    try {
+      const paths = [
+        "produtos", "tecnicos", "estoque-tecnicos", "logs",
+        "previsao-compras", "imeis", "dashboard",
+      ];
+
+      const responses = await Promise.all(
+        paths.map(path => api.get(`/${path}`)),
+      );
+
+      if (id !== requestId.current) return;
+
+      const [
+        produtos, tecnicos, estoque, logs, previsao, imeis, dashboard,
+      ] = responses.map(response => response.data);
+
+      setData({
+        produtos, tecnicos, estoque, logs, previsao, imeis, dashboard,
+      });
+      setUpdated(new Date());
+      setError("");
+    } catch (e) {
+      if (id === requestId.current) setError(errorMessage(e));
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reload();
+    return () => { requestId.current++; };
+  }, [reload]);
+
+  useEffect(() => {
+    const onBusy = event => setBusy(event.detail);
+    const onFocus = () => setNotifyPermission(permission());
+
+    window.addEventListener("invent:busy", onBusy);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      window.removeEventListener("invent:busy", onBusy);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    const escape = event => {
+      if (event.key === "Escape") setMenu(false);
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, []);
+
+  const alerts = useMemo(() => {
+    const categories = new Map();
+    const team = new Map();
+
+    data.produtos.forEach(p => {
+      const category = p.categoria || "RASTREADOR";
+      const current = categories.get(category) || {
+        quantidade: 0, minimo: 0,
+      };
+
+      current.quantidade += Number(p.quantidade_matriz || 0);
+      current.minimo = Math.max(
+        current.minimo, Number(p.estoque_minimo || 0),
+      );
+      categories.set(category, current);
+    });
+
+    data.tecnicos.forEach(t => {
+      categories.forEach((_, category) => {
+        team.set(`${t.id}-${category}`, {
+          nome: t.nome,
+          categoria: category,
+          quantidade: 0,
+          minimo: Number(t.estoque_minimo || 0),
+        });
+      });
+    });
+
+    data.estoque.forEach(item => {
+      const category = item.categoria || "RASTREADOR";
+      const key = `${item.tecnico_id}-${category}`;
+
+      if (team.has(key)) {
+        team.get(key).quantidade += Number(item.quantidade || 0);
+      }
+    });
+
+    const result = [];
+
+    categories.forEach((item, category) => {
+      if (item.quantidade <= item.minimo) {
+        result.push({
+          key: `matriz-${category}`,
+          nome: "Matriz",
+          categoria: category,
+          ...item,
+        });
+      }
+    });
+
+    team.forEach((item, key) => {
+      if (item.quantidade <= item.minimo) {
+        result.push({ key, ...item });
+      }
+    });
+
+    return result;
+  }, [data.produtos, data.tecnicos, data.estoque]);
+
+  useEffect(() => {
+    if (!notificationsOn || loading || error) return;
+
+    const key = item =>
+      `${item.key}:${item.quantidade}:${item.minimo}`;
+
+    const fresh = alerts.filter(
+      item => !notified.current.has(key(item)),
+    );
+
+    notified.current = new Set(alerts.map(key));
+
+    if (!fresh.length) return;
+
+    try {
+      const first = fresh[0];
+
+      new Notification("Estoque precisa de atenção", {
+        body:
+          `${first.nome} · ${first.categoria}: ` +
+          `${first.quantidade} unidade(s).` +
+          (fresh.length > 1
+            ? ` E mais ${fresh.length - 1} alerta(s).`
+            : ""),
+        tag: "invent-stock",
+      });
+    } catch {
+      // Os alertas continuam disponíveis na interface.
+    }
+  }, [alerts, notificationsOn, loading, error]);
+
+  async function toggleNotifications() {
+    const current = permission();
+    setNotifyPermission(current);
+
+    if (current === "unsupported") return;
+
+    if (current === "denied") {
+      setNotice(
+        "As notificações estão bloqueadas. Libere a permissão " +
+        "nas configurações deste site no navegador.",
+      );
+      return;
+    }
+
+    if (current === "granted") {
+      const enabled = !notificationsOn;
+
+      setNotifyEnabled(enabled);
+      remember(enabled);
+
+      if (enabled) notified.current.clear();
+
+      setNotice(
+        enabled
+          ? "Notificações ativadas."
+          : "Notificações silenciadas neste navegador.",
+      );
+      return;
+    }
+
+    try {
+      const allowed = await Notification.requestPermission();
+      setNotifyPermission(allowed);
+
+      if (allowed === "granted") {
+        setNotifyEnabled(true);
+        remember(true);
+        notified.current.clear();
+      }
+
+      setNotice(
+        allowed === "granted"
+          ? "Notificações ativadas."
+          : "Permissão não concedida. Os alertas continuam disponíveis no painel.",
       );
     } catch {
-      alert("Não foi possível ativar notificações neste navegador.");
+      setNotice(
+        "Não foi possível ativar as notificações neste navegador.",
+      );
     }
   }
-  const changeTab = (tab) => {
-    setActiveTab(tab);
-    setMenuAberto(false);
-  };
+
+  function navigate(next) {
+    setTab(next);
+    setMenu(false);
+  }
+
+  const bellLabel =
+    notifyPermission === "unsupported"
+      ? "Notificações indisponíveis neste navegador"
+      : notifyPermission === "denied"
+        ? "Notificações bloqueadas pelo navegador"
+        : notificationsOn
+          ? "Silenciar notificações"
+          : "Ativar notificações";
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-      {menuAberto && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setMenuAberto(false)}
+    <div className="inventory-app">
+      {menu && (
+        <button
+          className="sidebar-backdrop"
+          aria-label="Fechar menu"
+          onClick={() => setMenu(false)}
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 transform ${menuAberto ? "translate-x-0" : "-translate-x-full"} lg:relative lg:translate-x-0 w-72 shrink-0 bg-slate-900 text-white flex flex-col z-50 transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none`}
+        id="inventory-menu"
+        className={`app-sidebar ${menu ? "is-open" : ""}`}
       >
-        <div className="p-6 text-2xl font-bold border-b border-slate-800 flex justify-between items-center">
-          <span>
-            Estoque <span className="text-blue-500">Pro</span>
-          </span>
+        <div className="brand">
+          <span className="brand-mark"><Box size={23} /></span>
+          <div>
+            <strong>Estoque<span>Pro</span></strong>
+            <small>Inventário & rastreamento</small>
+          </div>
           <button
+            className="icon-button sidebar-close"
             aria-label="Fechar menu"
-            className="lg:hidden text-slate-400 hover:text-white"
-            onClick={() => setMenuAberto(false)}
+            onClick={() => setMenu(false)}
           >
-            <X size={28} />
+            <X size={18} />
           </button>
         </div>
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto pb-20">
-          <MenuButton
-            icon={<LayoutDashboard />}
-            label="Dashboard"
-            active={activeTab === "dashboard"}
-            onClick={() => changeTab("dashboard")}
-          />
-          <MenuButton
-            icon={<PackagePlus />}
-            label="Entrada Matriz"
-            active={activeTab === "entrada"}
-            onClick={() => changeTab("entrada")}
-          />
-          <MenuButton
-            icon={<Truck />}
-            label="Carga p/ Técnico"
-            active={activeTab === "transferencia"}
-            onClick={() => changeTab("transferencia")}
-          />
-          <MenuButton
-            icon={<Wrench />}
-            label="Baixa (Instalação)"
-            active={activeTab === "instalacao"}
-            onClick={() => changeTab("instalacao")}
-          />
-          <MenuButton
-            icon={<Undo2 />}
-            label="Correções (Estornos)"
-            active={activeTab === "estorno"}
-            onClick={() => changeTab("estorno")}
-          />
-          <MenuButton
-            icon={<Search />}
-            label="Controle IMEI & Triagem"
-            active={activeTab === "rastreio"}
-            onClick={() => changeTab("rastreio")}
-          />
-          <MenuButton
-            icon={<Box />}
-            label="Cadastrar Equipamentos"
-            active={activeTab === "equipamentos"}
-            onClick={() => changeTab("equipamentos")}
-          />
-          <MenuButton
-            icon={<ShoppingCart />}
-            label="Previsão Compras"
-            active={activeTab === "compras"}
-            onClick={() => changeTab("compras")}
-          />
-          <MenuButton
-            icon={<UserPlus />}
-            label="Equipe (Técnicos)"
-            active={activeTab === "tecnicos"}
-            onClick={() => changeTab("tecnicos")}
-          />
-          <MenuButton
-            icon={<ClipboardList />}
-            label="Histórico (Logs)"
-            active={activeTab === "logs"}
-            onClick={() => changeTab("logs")}
-          />
-          <MenuButton
-            icon={<Settings />}
-            label="Configurações"
-            active={activeTab === "config"}
-            onClick={() => changeTab("config")}
-          />
+
+        <nav
+          className="sidebar-nav"
+          aria-label="Navegação principal"
+        >
+          {groups.map(group => (
+            <div className="nav-group" key={group.label}>
+              <p>{group.label}</p>
+
+              {group.items.map(([id, label, Icon]) => (
+                <button
+                  key={id}
+                  className={`nav-item ${tab === id ? "is-active" : ""}`}
+                  aria-current={tab === id ? "page" : undefined}
+                  onClick={() => navigate(id)}
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                  {tab === id && <ChevronRight size={15} />}
+                </button>
+              ))}
+            </div>
+          ))}
         </nav>
-        <div className="p-4 border-t border-slate-800 flex flex-col gap-2">
+
+        <div className="sidebar-footer">
+          <span className="avatar">EP</span>
+          <div>
+            <strong>P
+
+Substitua completamente estes **três arquivos** dentro de `invent-front`.
+
+**`invent-front/src/App.jsx`**
+
+```jsx
+import {
+  lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState,
+} from "react";
+import {
+  Activity, Bell, BellOff, Box, ChevronRight, ClipboardList,
+  LayoutDashboard, LogOut, Menu, PackagePlus, RefreshCw, Search,
+  Settings, ShoppingCart, Truck, Undo2, UserPlus, Wrench, X, AlertTriangle,
+} from "lucide-react";
+import { api, errorMessage, saveToken } from "./lib/api";
+import {
+  TelaEntrada, TelaTransferencia, TelaInstalacao, TelaEstorno,
+  TelaRastreioTriagem, TelaEquipamentos, TelaCompras,
+  TelaTecnicos, TelaLogs, TelaConfiguracao,
+} from "./components/screens";
+
+const Dashboard = lazy(() => import("./components/Dashboard"));
+
+const groups = [
+  {
+    label: "Visão geral",
+    items: [["dashboard", "Dashboard", LayoutDashboard]],
+  },
+  {
+    label: "Movimentações",
+    items: [
+      ["entrada", "Entrada na matriz", PackagePlus],
+      ["transferencia", "Carga para técnico", Truck],
+      ["instalacao", "Instalações", Wrench],
+      ["estorno", "Devoluções e estornos", Undo2],
+      ["rastreio", "IMEIs e triagem", Search],
+    ],
+  },
+  {
+    label: "Gestão",
+    items: [
+      ["equipamentos", "Equipamentos", Box],
+      ["compras", "Previsão de compras", ShoppingCart],
+      ["tecnicos", "Equipe técnica", UserPlus],
+      ["logs", "Histórico", ClipboardList],
+      ["config", "Configurações", Settings],
+    ],
+  },
+];
+
+const preferenceKey = "invent.notifications.enabled";
+
+const permission = () =>
+  typeof Notification === "undefined"
+    ? "unsupported"
+    : Notification.permission;
+
+function remember(enabled) {
+  try {
+    localStorage.setItem(preferenceKey, String(enabled));
+  } catch {
+    // A preferência continua funcionando nesta sessão.
+  }
+}
+
+export default function App() {
+  const [tab, setTab] = useState("dashboard");
+  const [menu, setMenu] = useState(false);
+  const [data, setData] = useState({
+    produtos: [],
+    tecnicos: [],
+    estoque: [],
+    logs: [],
+    previsao: [],
+    imeis: [],
+    dashboard: { kpis: {}, grafico: [], tecnicos: [] },
+  });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [updated, setUpdated] = useState(null);
+  const [notice, setNotice] = useState("");
+  const [notifyPermission, setNotifyPermission] = useState(permission);
+  const [notifyEnabled, setNotifyEnabled] = useState(() => {
+    try {
+      return localStorage.getItem(preferenceKey) !== "false";
+    } catch {
+      return true;
+    }
+  });
+
+  const requestId = useRef(0);
+  const notified = useRef(new Set());
+  const title = groups
+    .flatMap((group) => group.items)
+    .find((item) => item[0] === tab)?.[1];
+
+  const notificationsOn =
+    notifyEnabled && notifyPermission === "granted";
+
+  const reload = useCallback(async () => {
+    const id = ++requestId.current;
+    setLoading(true);
+
+    try {
+      const paths = [
+        "produtos", "tecnicos", "estoque-tecnicos", "logs",
+        "previsao-compras", "imeis", "dashboard",
+      ];
+      const responses = await Promise.all(
+        paths.map((path) => api.get(`/${path}`)),
+      );
+
+      if (id !== requestId.current) return;
+
+      const [
+        produtos, tecnicos, estoque, logs, previsao, imeis, dashboard,
+      ] = responses.map((response) => response.data);
+
+      setData({
+        produtos, tecnicos, estoque, logs, previsao, imeis, dashboard,
+      });
+      setUpdated(new Date());
+      setError("");
+    } catch (e) {
+      if (id === requestId.current) setError(errorMessage(e));
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reload();
+    return () => { requestId.current++; };
+  }, [reload]);
+
+  useEffect(() => {
+    const onBusy = (event) => setBusy(event.detail);
+    const onFocus = () => setNotifyPermission(permission());
+
+    window.addEventListener("invent:busy", onBusy);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      window.removeEventListener("invent:busy", onBusy);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    const escape = (event) => {
+      if (event.key === "Escape") setMenu(false);
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, []);
+
+  const alerts = useMemo(() => {
+    const categories = new Map();
+    const team = new Map();
+
+    data.produtos.forEach((p) => {
+      const category = p.categoria || "RASTREADOR";
+      const current = categories.get(category) || {
+        quantidade: 0,
+        minimo: 0,
+      };
+
+      current.quantidade += Number(p.quantidade_matriz || 0);
+      current.minimo = Math.max(
+        current.minimo,
+        Number(p.estoque_minimo || 0),
+      );
+      categories.set(category, current);
+    });
+
+    data.tecnicos.forEach((t) => {
+      categories.forEach((_, category) => {
+        team.set(`${t.id}-${category}`, {
+          nome: t.nome,
+          categoria: category,
+          quantidade: 0,
+          minimo: Number(t.estoque_minimo || 0),
+        });
+      });
+    });
+
+    data.estoque.forEach((item) => {
+      const category = item.categoria || "RASTREADOR";
+      const key = `${item.tecnico_id}-${category}`;
+
+      if (team.has(key)) {
+        team.get(key).quantidade += Number(item.quantidade || 0);
+      }
+    });
+
+    const result = [];
+
+    categories.forEach((item, category) => {
+      if (item.quantidade <= item.minimo) {
+        result.push({
+          key: `matriz-${category}`,
+          nome: "Matriz",
+          categoria: category,
+          ...item,
+        });
+      }
+    });
+
+    team.forEach((item, key) => {
+      if (item.quantidade <= item.minimo) {
+        result.push({ key, ...item });
+      }
+    });
+
+    return result;
+  }, [data.produtos, data.tecnicos, data.estoque]);
+
+  useEffect(() => {
+    if (!notificationsOn || loading || error) return;
+
+    const key = (item) =>
+      `${item.key}:${item.quantidade}:${item.minimo}`;
+
+    const fresh = alerts.filter(
+      (item) => !notified.current.has(key(item)),
+    );
+    notified.current = new Set(alerts.map(key));
+
+    if (!fresh.length) return;
+
+    try {
+      const first = fresh[0];
+
+      new Notification("Estoque precisa de atenção", {
+        body:
+          `${first.nome} · ${first.categoria}: ` +
+          `${first.quantidade} unidade(s).` +
+          (fresh.length > 1
+            ? ` E mais ${fresh.length - 1} alerta(s).`
+            : ""),
+        tag: "invent-stock",
+      });
+    } catch {
+      // Os alertas continuam disponíveis no painel.
+    }
+  }, [alerts, notificationsOn, loading, error]);
+
+  async function toggleNotifications() {
+    const current = permission();
+    setNotifyPermission(current);
+
+    if (current === "unsupported") return;
+
+    if (current === "denied") {
+      setNotice(
+        "As notificações estão bloqueadas. Libere a permissão " +
+        "nas configurações deste site no navegador.",
+      );
+      return;
+    }
+
+    if (current === "granted") {
+      const enabled = !notificationsOn;
+      setNotifyEnabled(enabled);
+      remember(enabled);
+
+      if (enabled) notified.current.clear();
+
+      setNotice(
+        enabled
+          ? "Notificações ativadas."
+          : "Notificações silenciadas neste navegador.",
+      );
+      return;
+    }
+
+    try {
+      const allowed = await Notification.requestPermission();
+      setNotifyPermission(allowed);
+
+      if (allowed === "granted") {
+        setNotifyEnabled(true);
+        remember(true);
+        notified.current.clear();
+      }
+
+      setNotice(
+        allowed === "granted"
+          ? "Notificações ativadas."
+          : "Permissão não concedida. Os alertas continuam disponíveis no painel.",
+      );
+    } catch {
+      setNotice(
+        "Não foi possível ativar as notificações neste navegador.",
+      );
+    }
+  }
+
+  function navigate(next) {
+    setTab(next);
+    setMenu(false);
+  }
+
+  const bellLabel =
+    notifyPermission === "unsupported"
+      ? "Notificações indisponíveis neste navegador"
+      : notifyPermission === "denied"
+        ? "Notificações bloqueadas pelo navegador"
+        : notificationsOn
+          ? "Silenciar notificações"
+          : "Ativar notificações";
+
+  return (
+    <div className="inventory-app">
+      {menu && (
+        <button
+          className="sidebar-backdrop"
+          aria-label="Fechar menu"
+          onClick={() => setMenu(false)}
+        />
+      )}
+
+      <aside
+        id="inventory-menu"
+        className={`app-sidebar ${menu ? "is-open" : ""}`}
+      >
+        <div className="brand">
+          <span className="brand-mark"><Box size={23} /></span>
+          <div>
+            <strong>Estoque<span>Pro</span></strong>
+            <small>Inventário & rastreamento</small>
+          </div>
           <button
-            onClick={enableNotifications}
-            className="text-sm text-slate-300 p-2"
+            className="icon-button sidebar-close"
+            aria-label="Fechar menu"
+            onClick={() => setMenu(false)}
           >
-            Ativar notificações
+            <X size={18} />
           </button>
+        </div>
+
+        <nav className="sidebar-nav" aria-label="Navegação principal">
+          {groups.map((group) => (
+            <div className="nav-group" key={group.label}>
+              <p>{group.label}</p>
+              {group.items.map(([id, label, Icon]) => (
+                <button
+                  key={id}
+                  className={`nav-item ${tab === id ? "is-active" : ""}`}
+                  aria-current={tab === id ? "page" : undefined}
+                  onClick={() => navigate(id)}
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                  {tab === id && <ChevronRight size={15} />}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <span className="avatar">EP</span>
+          <div>
+            <strong>Painel administrativo</strong>
+            <small>Gestão de equipamentos</small>
+          </div>
           <button
+            className="icon-button"
+            title="Sair"
+            aria-label="Sair"
+            disabled={busy}
             onClick={() => {
               saveToken(null);
               window.dispatchEvent(new Event("invent:unauthorized"));
             }}
-            className="text-sm text-slate-300 p-2"
           >
-            Sair
+            <LogOut size={18} />
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0 flex flex-col h-full w-full overflow-hidden relative">
-        <header className="lg:hidden bg-slate-900 text-white p-4 flex items-center shadow-md">
-          <button
-            aria-label="Abrir menu"
-            onClick={() => setMenuAberto(true)}
-            className="mr-4 focus:outline-none"
-          >
-            <Menu size={28} />
-          </button>
-          <h1 className="text-xl font-bold">Estoque Pro</h1>
+      <main className="app-main">
+        <header className="topbar">
+          <div className="topbar-context">
+            <button
+              className="icon-button menu-toggle"
+              aria-label="Abrir menu"
+              aria-expanded={menu}
+              aria-controls="inventory-menu"
+              onClick={() => setMenu(true)}
+            >
+              <Menu size={22} />
+            </button>
+            <div>
+              <div className="breadcrumb">
+                Workspace <ChevronRight size={12} /> {title}
+              </div>
+              <h1>{title}</h1>
+            </div>
+          </div>
+
+          <div className="topbar-actions">
+            <span className="header-date">
+              {new Date().toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "long",
+              })}
+            </span>
+
+            <button
+              className={`icon-button notification-button ${notificationsOn ? "is-enabled" : ""}`}
+              title={bellLabel}
+              aria-label={bellLabel}
+              aria-pressed={notificationsOn}
+              disabled={notifyPermission === "unsupported"}
+              onClick={toggleNotifications}
+            >
+              {notificationsOn || notifyPermission === "default"
+                ? <Bell size={20} />
+                : <BellOff size={20} />}
+              {notificationsOn && <span className="notification-dot" />}
+            </button>
+
+            <span className="avatar header-avatar">EP</span>
+          </div>
         </header>
 
-        <div className="flex-1 p-4 md:p-8 overflow-y-auto pb-24">
-          <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
-            <p role="status" className="text-sm text-slate-500">
-              {busy
-                ? "Salvando operação…"
-                : loading
-                  ? "Atualizando dados…"
-                  : lastUpdated
-                    ? `Atualizado às ${lastUpdated.toLocaleTimeString("pt-BR")}`
-                    : "Aguardando dados"}
-            </p>
-            <button
-              disabled={loading || busy}
-              onClick={fetchData}
-              className="bg-white border rounded-lg px-4 py-2 text-sm disabled:opacity-50"
+        <div className="app-content">
+          <div className="sync-toolbar">
+            <span
+              role="status"
+              className={`sync-status ${error ? "has-error" : ""}`}
             >
-              Atualizar dados
+              <i />
+              {busy
+                ? "Salvando movimentação…"
+                : loading
+                  ? "Sincronizando inventário…"
+                  : error
+                    ? "Falha na atualização"
+                    : `Última atualização às ${
+                      updated?.toLocaleTimeString("pt-BR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }) || "—"
+                    }`}
+            </span>
+
+            <button
+              className="refresh-button"
+              disabled={loading || busy}
+              onClick={reload}
+            >
+              <RefreshCw
+                size={15}
+                className={loading ? "is-spinning" : ""}
+              />
+              Atualizar
             </button>
           </div>
-          {loadError && (
-            <div
-              role="alert"
-              className="mb-6 bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg"
-            >
-              {loadError} Os dados exibidos podem estar desatualizados.
+
+          {error && (
+            <div role="alert" className="error-banner">
+              <AlertTriangle size={19} />
+              <div>
+                <strong>Não foi possível atualizar os dados</strong>
+                <p>{error} Os dados exibidos podem estar desatualizados.</p>
+              </div>
             </div>
           )}
-          <fieldset
-            disabled={busy || loading || Boolean(loadError)}
-            className="min-w-0 border-0 p-0 m-0"
-          >
-            {(alertasMatriz.length > 0 || alertasTecnicos.length > 0) && (
-              <div className="mb-8 bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm">
-                <div className="flex items-center text-red-800 font-bold mb-2">
-                  <AlertTriangle className="mr-2" /> Atenção: Níveis Críticos de
-                  Estoque
-                </div>
-                <ul className="ml-8 text-red-700 list-disc text-sm space-y-1">
-                  {alertasMatriz.map((a) => (
-                    <li key={`m-${a.categoria}`}>
-                      <strong>Matriz ({a.categoria}):</strong> Restam apenas{" "}
-                      {a.quantidade} no total (Mínimo: {a.minimo})
-                    </li>
-                  ))}
-                  {alertasTecnicos.map((a) => (
-                    <li key={`t-${a.tecnico_id}-${a.categoria}`}>
-                      <strong>
-                        {a.tecnico_nome} ({a.categoria}):
-                      </strong>{" "}
-                      Restam apenas {a.quantidade} em posse (Mínimo: {a.minimo})
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
 
-            <Suspense
-              fallback={
-                <p role="status" className="p-6">
-                  Carregando tela…
-                </p>
-              }
-            >
-              {activeTab === "dashboard" && <TelaDashboard data={dashboard} />}
-              {activeTab === "entrada" && (
-                <TelaEntrada produtos={produtos} reload={fetchData} />
-              )}
-              {activeTab === "transferencia" && (
-                <TelaTransferencia
-                  produtos={produtos}
-                  tecnicos={tecnicos}
-                  imeisGlobais={imeisGlobais}
-                  reload={fetchData}
-                />
-              )}
-              {activeTab === "instalacao" && (
-                <TelaInstalacao
-                  produtos={produtos}
-                  tecnicos={tecnicos}
-                  estoque={estoqueTecnicos}
-                  imeisGlobais={imeisGlobais}
-                  reload={fetchData}
-                />
-              )}
-              {activeTab === "estorno" && (
-                <TelaEstorno
-                  produtos={produtos}
-                  tecnicos={tecnicos}
-                  estoque={estoqueTecnicos}
-                  imeisGlobais={imeisGlobais}
-                  reload={fetchData}
-                />
-              )}
-              {activeTab === "rastreio" && (
-                <TelaRastreioTriagem
-                  imeisGlobais={imeisGlobais}
-                  reload={fetchData}
-                />
-              )}
-              {activeTab === "equipamentos" && (
-                <TelaEquipamentos produtos={produtos} reload={fetchData} />
-              )}
-              {activeTab === "compras" && (
-                <TelaCompras previsao={previsao} produtos={produtos} />
-              )}
-              {activeTab === "tecnicos" && (
-                <TelaTecnicos
-                  tecnicos={tecnicos}
-                  estoque={estoqueTecnicos}
-                  reload={fetchData}
-                />
-              )}
-              {activeTab === "logs" && <TelaLogs logs={logs} />}
-              {activeTab === "config" && (
-                <TelaConfiguracao
-                  produtos={produtos}
-                  tecnicos={tecnicos}
-                  reload={fetchData}
-                />
-              )}
-            </Suspense>
+          {alerts.length > 0 && (
+            <details className="stock-alerts">
+              <summary>
+                <span className="alert-icon">
+                  <AlertTriangle size={18} />
+                </span>
+                <span>
+                  <strong>
+                    {alerts.length} ponto(s) de atenção no estoque
+                  </strong>
+                  <small>
+                    Confira os saldos abaixo do mínimo configurado.
+                  </small>
+                </span>
+                <ChevronRight className="alert-chevron" size={18} />
+              </summary>
+              <div className="alert-list">
+                {alerts.map((item) => (
+                  <div key={item.key}>
+                    <span>
+                      <strong>{item.nome}</strong>
+                      <small>{item.categoria}</small>
+                    </span>
+                    <span>
+                      {item.quantidade} unidade(s)
+                      <small>Mínimo: {item.minimo}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          <fieldset
+            className="workspace-fieldset"
+            disabled={busy || loading || Boolean(error)}
+          >
+            <div className="workspace-view">
+              <Suspense
+                fallback={
+                  <div className="loading-card" role="status">
+                    <Activity size={22} /> Carregando tela…
+                  </div>
+                }
+              >
+                {tab === "dashboard" && (
+                  <Dashboard
+                    data={data.dashboard}
+                    produtos={data.produtos}
+                    tecnicos={data.tecnicos}
+                    imeis={data.imeis}
+                    onNavigate={navigate}
+                  />
+                )}
+                {tab === "entrada" && (
+                  <TelaEntrada produtos={data.produtos} reload={reload} />
+                )}
+                {tab === "transferencia" && (
+                  <TelaTransferencia
+                    produtos={data.produtos}
+                    tecnicos={data.tecnicos}
+                    imeisGlobais={data.imeis}
+                    reload={reload}
+                  />
+                )}
+                {tab === "instalacao" && (
+                  <TelaInstalacao
+                    produtos={data.produtos}
+                    tecnicos={data.tecnicos}
+                    estoque={data.estoque}
+                    imeisGlobais={data.imeis}
+                    reload={reload}
+                  />
+                )}
+                {tab === "estorno" && (
+                  <TelaEstorno
+                    produtos={data.produtos}
+                    tecnicos={data.tecnicos}
+                    estoque={data.estoque}
+                    imeisGlobais={data.imeis}
+                    reload={reload}
+                  />
+                )}
+                {tab === "rastreio" && (
+                  <TelaRastreioTriagem
+                    imeisGlobais={data.imeis}
+                    reload={reload}
+                  />
+                )}
+                {tab === "equipamentos" && (
+                  <TelaEquipamentos
+                    produtos={data.produtos}
+                    reload={reload}
+                  />
+                )}
+                {tab === "compras" && (
+                  <TelaCompras
+                    previsao={data.previsao}
+                    produtos={data.produtos}
+                  />
+                )}
+                {tab === "tecnicos" && (
+                  <TelaTecnicos
+                    tecnicos={data.tecnicos}
+                    estoque={data.estoque}
+                    reload={reload}
+                  />
+                )}
+                {tab === "logs" && <TelaLogs logs={data.logs} />}
+                {tab === "config" && (
+                  <TelaConfiguracao
+                    produtos={data.produtos}
+                    tecnicos={data.tecnicos}
+                    reload={reload}
+                  />
+                )}
+              </Suspense>
+            </div>
           </fieldset>
+
+          <footer className="page-footer">
+            <span>EstoquePro · Controle de inventário</span>
+            <span>Organização em cada movimentação.</span>
+          </footer>
         </div>
       </main>
-    </div>
-  );
-}
 
-function MenuButton({ icon, label, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center p-3 rounded-lg transition-colors ${active ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"}`}
-    >
-      {icon} <span className="ml-3 text-sm">{label}</span>
-    </button>
+      {notice && (
+        <div className="ui-toast" role="status">
+          <Bell size={18} />
+          <p>{notice}</p>
+          <button
+            className="icon-button"
+            aria-label="Fechar aviso"
+            onClick={() => setNotice("")}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
