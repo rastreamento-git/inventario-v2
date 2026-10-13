@@ -2,9 +2,11 @@ import axios from "axios";
 const TOKEN_KEY = "invent.session";
 let mutationPending = false;
 
+// Remove qualquer barra ou /api do final da variável para termos uma base limpa
+const renderUrl = (import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "").replace(/\/$/, "");
+
 export const api = axios.create({
-  // Garante que a URL base sempre termine com barra para o Axios não cortar o /api
-  baseURL: (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "") + "/",
+  baseURL: renderUrl, 
   timeout: 30000,
 });
 
@@ -24,9 +26,14 @@ export function errorMessage(error) {
 }
 
 api.interceptors.request.use((config) => {
-  // CORREÇÃO: Remove a barra inicial da rota para respeitar o /api do backend
-  if (config.url && config.url.startsWith("/")) {
-    config.url = config.url.substring(1);
+  // CORREÇÃO DEFINITIVA: Injeta ativamente o /api no caminho, impedindo o Axios de o apagar
+  if (config.url) {
+    const path = config.url.startsWith("/") ? config.url : `/${config.url}`;
+    if (!path.startsWith("/api/")) {
+      config.url = `/api${path}`;
+    } else {
+      config.url = path;
+    }
   }
 
   const token = sessionStorage.getItem(TOKEN_KEY);
@@ -66,5 +73,5 @@ api.interceptors.response.use(
       window.dispatchEvent(new Event("invent:unauthorized"));
     }
     return Promise.reject(error);
-  },
+  }
 );
