@@ -2,6 +2,7 @@ import { useState, useEffect, lazy } from "react";
 import { api, errorMessage } from "../lib/api";
 import { mergeSerials } from "../lib/serials";
 import { groupForecast } from "../lib/forecast";
+import TipoEquipamento from "./TipoEquipamento";
 import {
   PackagePlus,
   Truck,
@@ -344,17 +345,7 @@ export function TelaEquipamentos({ produtos, reload }) {
         </h2>
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Categoria do Aparelho
-            </label>
-            <select
-              className="w-full p-4 border border-gray-300 rounded-xl bg-gray-50 font-bold text-blue-800"
-              value={categoria}
-              onChange={(e) => setCategoria(e.target.value)}
-            >
-              <option value="RASTREADOR">Rastreador</option>
-              <option value="TAG">Tag</option>
-            </select>
+            <TipoEquipamento value={categoria} onChange={setCategoria} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -379,12 +370,18 @@ export function TelaEquipamentos({ produtos, reload }) {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Ou importe uma lista (.txt):
           </label>
-          <label className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-4 rounded-xl flex justify-center items-center cursor-pointer transition">
-            <Upload className="mr-2" size={20} /> Escolher Arquivo TXT
+          <label className="equipment-import">
+            <span className="equipment-import-icon">
+              <Upload size={20} />
+            </span>
+            <span>
+              <strong>Importar modelos</strong>
+              <small>Lista TXT · um modelo por linha</small>
+            </span>
             <input
               type="file"
               accept=".txt"
-              className="hidden"
+              className="sr-only"
               onChange={importarTXT}
             />
           </label>
