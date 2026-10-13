@@ -554,12 +554,13 @@ export default function App() {
                     reload={reload}
                   />
                 )}
-                {tab === "rastreio" && (
-                  <TelaRastreioTriagem
-                    imeisGlobais={data.imeis}
-                    reload={reload}
-                  />
-                )}
+               {tab === "rastreio" && (
+                 <TelaRastreioTriagem
+                   imeisGlobais={data.imeis}
+                   produtos={data.produtos}
+                   reload={reload}
+                />
+              )}
                 {tab === "equipamentos" && (
                   <TelaEquipamentos
                     produtos={data.produtos}
