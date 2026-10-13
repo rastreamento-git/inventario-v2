@@ -54,28 +54,22 @@ async function releaseScanner(scanner, host) {
 function cameraError(error) {
   const name = error?.name || String(error);
   if (/NotAllowed|Permission|denied/i.test(name))
-    return `Permissão negada. Clique no ícone de cadeado na barra de endereço do navegador e permita a câmera.`;
+    return `Permissão negada. Conceda acesso à câmera nas configurações do navegador.`;
   if (/NotFound|DevicesNotFound/i.test(name))
-    return `Nenhuma câmera foi detectada neste computador ou celular.`;
+    return `Nenhuma câmera detectada neste computador ou celular.`;
   if (/NotReadable|TrackStart/i.test(name))
-    return `A câmera já está em uso por outro programa ou aba (Meet, Zoom, etc).`;
+    return `A câmera está em uso por outro programa ou aba (Meet, Teams, etc.).`;
   if (/Overconstrained|ConstraintNotSatisfied/i.test(name))
-    return `A resolução desta webcam não é suportada. Selecione outra câmera na lista.`;
-  return `Não foi possível abrir a câmera. Verifique as permissões do navegador.`;
+    return `A resolução da câmera não é suportada. Selecione outra câmera na lista.`;
+  return `Não foi possível abrir a câmera. Verifique as permissões.`;
 }
 
 const config = {
   formatsToSupport: [
-    Formats.QR_CODE,
     Formats.CODE_128,
-    Formats.CODE_39,
-    Formats.CODE_93,
+    Formats.QR_CODE,
     Formats.EAN_13,
-    Formats.EAN_8,
-    Formats.ITF,
-    Formats.UPC_A,
-    Formats.UPC_E,
-    Formats.DATA_MATRIX,
+    Formats.CODE_39,
   ],
   useBarCodeDetectorIfSupported: false,
   verbose: false,
@@ -197,7 +191,6 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
 
           scanner = new Html5Qrcode(cameraId, config);
 
-          // Obtém câmeras conectadas para preencher o select
           let currentDevices = devices;
           try {
             const available = await Html5Qrcode.getCameras();
@@ -206,10 +199,9 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
               if (!cancelled) setDevices(available);
             }
           } catch {
-            /* Permite continuar caso a enumeração prévia falhe */
+            /* Continua caso a enumeração prévia falhe */
           }
 
-          // Lista inteligente de tentativas (traseira no celular -> webcam frontal no PC)
           const targets = [];
           if (device) {
             targets.push(device);
@@ -229,7 +221,14 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
             try {
               await scanner.start(
                 target,
-                { fps: 15 },
+                {
+                  fps: 15,
+                  // Retângulo de alta precisão calibrado para IMEIs (largura ampla e altura reduzida)
+                  qrbox: (viewfinderWidth, viewfinderHeight) => ({
+                    width: Math.floor(Math.min(viewfinderWidth * 0.88, 380)),
+                    height: Math.floor(Math.min(viewfinderHeight * 0.45, 150)),
+                  }),
+                },
                 (code) => {
                   if (!cancelled) addRef.current([code], true);
                 },
@@ -245,10 +244,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
             }
           }
 
-          if (!started && lastError) {
-            throw lastError;
-          }
-
+          if (!started && lastError) throw lastError;
           if (cancelled) return;
           setStatus("active");
         } catch (e) {
@@ -324,7 +320,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           setLastCode(current.current[0]);
         }
         setMessage(
-          `${added} serial(is) adicionado(s); ${codes.length - added - rejected} repetido(s); ${failures} foto(s) sem leitura; ${rejected} código(s) inválido(s) ou acima do limite do lote.`,
+          `${added} serial(is) adicionado(s); ${codes.length - added - rejected} repetido(s); ${failures} foto(s) sem leitura; ${rejected} código(s) inválido(s).`,
         );
       }
     } catch {
@@ -444,7 +440,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
             disabled={status === "starting" && !paused}
             onChange={(e) => setDevice(e.target.value)}
           >
-            <option value="">Automática (traseira no celular / webcam no PC)</option>
+            <option value="">Automática (preferir traseira no celular)</option>
             {devices.map((d, index) => (
               <option key={d.id || d.deviceId} value={d.id || d.deviceId}>
                 {d.label || `Câmera ${index + 1}`}
@@ -489,7 +485,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           )}
         </div>
         <p className="reader-camera-tip">
-          Em webcams, mantenha a etiqueta a cerca de 15 a 25 cm da lente para foco nítido e sem reflexos.
+          Em webcams de PC, posicione o código a cerca de 15 a 20 cm da lente para foco ideal.
         </p>
       </div>
       <label className="reader-manual-label" htmlFor={`manual-${id}`}>
