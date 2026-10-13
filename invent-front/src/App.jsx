@@ -273,11 +273,11 @@ export default function App() {
 
       if (enabled) notified.current.clear();
 
-      setNotice(
+    setNotice(
         enabled
           ? "Notificações ativadas."
-          : "Notificações sil
-
+          : "Notificações silenciadas neste navegador."
+      );
 Substitua o conteúdo completo destes **três arquivos** no frontend.
 
 **`invent-front/src/App.jsx`**
