@@ -1,0 +1,4 @@
+# Local: keep empty to use Vite /api proxy.
+VITE_API_URL=
+API_PROXY_TARGET=http://localhost:3000
+# Vercel: VITE_API_URL=https://YOUR-BACKEND.onrender.com/api (set before build)
