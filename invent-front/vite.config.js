@@ -18,7 +18,6 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id.includes("recharts")) return "charts";
-            if (id.includes("html5-qrcode")) return "scanner";
           },
         },
       },

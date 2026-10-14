@@ -1,12 +1,10 @@
 import axios from "axios";
+import { apiBaseUrl } from "./api-url";
 const TOKEN_KEY = "invent.session";
 let mutationPending = false;
 
-// Remove qualquer barra ou /api do final da variável para termos uma base limpa
-const renderUrl = (import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "").replace(/\/$/, "");
-
 export const api = axios.create({
-  baseURL: renderUrl, 
+  baseURL: apiBaseUrl(import.meta.env.VITE_API_URL),
   timeout: 30000,
 });
 
@@ -26,19 +24,9 @@ export function errorMessage(error) {
 }
 
 api.interceptors.request.use((config) => {
-  // CORREÇÃO DEFINITIVA: Injeta ativamente o /api no caminho, impedindo o Axios de o apagar
-  if (config.url) {
-    const path = config.url.startsWith("/") ? config.url : `/${config.url}`;
-    if (!path.startsWith("/api/")) {
-      config.url = `/api${path}`;
-    } else {
-      config.url = path;
-    }
-  }
-
   const token = sessionStorage.getItem(TOKEN_KEY);
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  
+
   if (!["get", "head", "options"].includes(config.method)) {
     if (mutationPending) {
       const error = new Error("Aguarde a operação em andamento.");
@@ -73,5 +61,5 @@ api.interceptors.response.use(
       window.dispatchEvent(new Event("invent:unauthorized"));
     }
     return Promise.reject(error);
-  }
+  },
 );

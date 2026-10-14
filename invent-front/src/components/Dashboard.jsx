@@ -1,14 +1,25 @@
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
 } from "recharts";
 import {
-  ArrowUpRight, CalendarDays, Package, Users,
-  ShieldCheck, Box, PackagePlus, Truck, Search,
+  ArrowUpRight,
+  CalendarDays,
+  Package,
+  Users,
+  ShieldCheck,
+  Box,
+  PackagePlus,
+  Truck,
+  Search,
 } from "lucide-react";
 
-const number = (value) =>
-  Number(value || 0).toLocaleString("pt-BR");
+const number = (value) => Number(value || 0).toLocaleString("pt-BR");
 
 export default function Dashboard({
   data,
@@ -21,15 +32,18 @@ export default function Dashboard({
     ["Hoje", data.kpis?.diario, "Instalações no dia", "mint"],
     ["Esta semana", data.kpis?.semanal, "Instalações na semana", "blue"],
     ["Este mês", data.kpis?.mensal, "Instalações no mês", "violet"],
-    ["Este trimestre", data.kpis?.trimestral, "Instalações no trimestre", "amber"],
+    [
+      "Este trimestre",
+      data.kpis?.trimestral,
+      "Instalações no trimestre",
+      "amber",
+    ],
   ];
 
   const stock = [
     [
       "Itens na matriz",
-      produtos.reduce(
-        (sum, p) => sum + Number(p.quantidade_matriz || 0), 0,
-      ),
+      produtos.reduce((sum, p) => sum + Number(p.quantidade_matriz || 0), 0),
       Package,
     ],
     ["Técnicos ativos", tecnicos.length, Users],
@@ -42,15 +56,27 @@ export default function Dashboard({
   ];
 
   const team = data.tecnicos || [];
-  const top = Math.max(
-    1,
-    ...team.map((t) => Number(t.total_mes || 0)),
-  );
+  const top = Math.max(1, ...team.map((t) => Number(t.total_mes || 0)));
 
   const actions = [
-    ["entrada", "Registrar entrada", "Novos equipamentos na matriz", PackagePlus],
-    ["transferencia", "Preparar uma carga", "Distribuir equipamentos à equipe", Truck],
-    ["rastreio", "Consultar um IMEI", "Ver situação e histórico do serial", Search],
+    [
+      "entrada",
+      "Registrar entrada",
+      "Novos equipamentos na matriz",
+      PackagePlus,
+    ],
+    [
+      "transferencia",
+      "Preparar uma carga",
+      "Distribuir equipamentos à equipe",
+      Truck,
+    ],
+    [
+      "rastreio",
+      "Consultar um IMEI",
+      "Ver situação e histórico do serial",
+      Search,
+    ],
   ];
 
   return (
@@ -87,7 +113,9 @@ export default function Dashboard({
       <section className="stock-overview" aria-label="Resumo do inventário">
         {stock.map(([label, value, Icon]) => (
           <div className="stock-item" key={label}>
-            <span className="stock-icon"><Icon size={19} /></span>
+            <span className="stock-icon">
+              <Icon size={19} />
+            </span>
             <div>
               <span>{label}</span>
               <strong>{number(value)}</strong>
@@ -103,7 +131,9 @@ export default function Dashboard({
               <h3>Ritmo de instalações</h3>
               <p>Volume registrado nos últimos 7 dias</p>
             </div>
-            <span className="chart-legend"><i /> Instalações</span>
+            <span className="chart-legend">
+              <i /> Instalações
+            </span>
           </div>
 
           <div className="chart-container">
@@ -115,7 +145,10 @@ export default function Dashboard({
                 <defs>
                   <linearGradient
                     id="inventory-bars"
-                    x1="0" y1="0" x2="0" y2="1"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
                   >
                     <stop offset="0%" stopColor="#14b8a6" />
                     <stop offset="100%" stopColor="#0f766e" />
@@ -167,7 +200,9 @@ export default function Dashboard({
               <h3>Desempenho da equipe</h3>
               <p>Instalações nos últimos 30 dias</p>
             </div>
-            <span className="panel-icon"><Users size={18} /></span>
+            <span className="panel-icon">
+              <Users size={18} />
+            </span>
           </div>
 
           {team.length ? (
@@ -192,13 +227,11 @@ export default function Dashboard({
                     <div className="team-progress">
                       <i
                         style={{
-                          width: `${Number(t.total_mes || 0) / top * 100}%`,
+                          width: `${(Number(t.total_mes || 0) / top) * 100}%`,
                         }}
                       />
                     </div>
-                    <small>
-                      {number(t.media_diaria)} instalações/dia
-                    </small>
+                    <small>{number(t.media_diaria)} instalações/dia</small>
                   </div>
 
                   <span className="team-position">
@@ -211,9 +244,7 @@ export default function Dashboard({
             <div className="dashboard-empty">
               <Users size={28} />
               <strong>Sua equipe aparece aqui</strong>
-              <p>
-                Cadastre os técnicos para acompanhar as instalações.
-              </p>
+              <p>Cadastre os técnicos para acompanhar as instalações.</p>
             </div>
           )}
         </section>
@@ -227,7 +258,9 @@ export default function Dashboard({
         <div className="quick-action-grid">
           {actions.map(([id, label, detail, Icon]) => (
             <button key={id} onClick={() => onNavigate(id)}>
-              <span className="quick-action-icon"><Icon size={20} /></span>
+              <span className="quick-action-icon">
+                <Icon size={20} />
+              </span>
               <span>
                 <strong>{label}</strong>
                 <small>{detail}</small>

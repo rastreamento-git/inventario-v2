@@ -1,9 +1,5 @@
 import { useState, useEffect, useRef, useId } from "react";
 import {
-  Html5Qrcode,
-  Html5QrcodeSupportedFormats as Formats,
-} from "html5-qrcode";
-import {
   Camera,
   ImagePlus,
   FileText,
@@ -17,65 +13,30 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import { mergeSerials, MAX_BATCH } from "../lib/serials";
-
-function scannerQueue() {
-  let tail = Promise.resolve();
-  return (task) => {
-    const result = tail.catch(() => {}).then(task);
-    tail = result;
-    return result;
-  };
-}
-
-async function releaseScanner(scanner, host) {
-  if (!scanner) return;
-  const video = host?.querySelector("video");
-  if (video?.srcObject && video.readyState < 2) {
-    await new Promise((resolve) => {
-      const done = () => {
-        clearTimeout(timer);
-        video.removeEventListener("playing", done);
-        video.removeEventListener("error", done);
-        resolve();
-      };
-      const timer = setTimeout(done, 1500);
-      video.addEventListener("playing", done, { once: true });
-      video.addEventListener("error", done, { once: true });
-    });
-  }
-  try {
-    const state = scanner.getState?.();
-    if (scanner.isScanning || state === 2 || state === 3) await scanner.stop();
-  } finally {
-    scanner.clear();
-  }
-}
-
-function cameraError(error) {
-  const name = error?.name || String(error);
-  if (/NotAllowed|Permission|denied/i.test(name))
-    return `Permissão negada. Conceda acesso à câmera nas configurações do navegador.`;
-  if (/NotFound|DevicesNotFound/i.test(name))
-    return `Nenhuma câmera detectada neste computador ou celular.`;
-  if (/NotReadable|TrackStart/i.test(name))
-    return `A câmera está em uso por outro programa ou aba (Meet, Teams, etc.).`;
-  if (/Overconstrained|ConstraintNotSatisfied/i.test(name))
-    return `A resolução da câmera não é suportada. Selecione outra câmera na lista.`;
-  return `Não foi possível abrir a câmera. Verifique as permissões.`;
-}
-
-const config = {
-  formatsToSupport: [
-    Formats.CODE_128,
-    Formats.QR_CODE,
-    Formats.EAN_13,
-    Formats.CODE_39,
-  ],
-  useBarCodeDetectorIfSupported: false,
-  verbose: false,
-};
+import {
+  cameraConstraints,
+  cameraError,
+  confirmationGate,
+  frameSize,
+  scanRegion,
+  stopStream,
+  tuneCamera,
+} from "../lib/scanner";
+import { createDecoder } from "../lib/scanner-client";
 
 export default function LeitorSeriais({ seriais, setSeriais }) {
+  const [mode, setMode] = useState("auto");
+  const [hidden, setHidden] = useState(() => document.hidden);
+  const [hint, setHint] = useState("");
+  const [dimensions, setDimensions] = useState({ width: 1920, height: 1080 });
+  const [controls, setControls] = useState({});
+  const [torch, setTorch] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const videoRef = useRef(null),
+    streamRef = useRef(null),
+    photoDecoder = useRef(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const [manual, setManual] = useState("");
   const [camera, setCamera] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -88,21 +49,15 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
   const [message, setMessage] = useState("");
   const [lastCode, setLastCode] = useState("");
   const id = useId().replace(/[^a-zA-Z0-9]/g, "");
-  const cameraId = `camera-${id}`,
-    fileId = `file-${id}`;
   const photoInput = useRef(null),
     txtInput = useRef(null);
   const current = useRef(seriais),
     setter = useRef(setSeriais);
-  const enqueue = useRef(null),
-    audio = useRef(null);
+  const audio = useRef(null);
   const mounted = useRef(true),
     generation = useRef(0);
   const importing = useRef(false),
     recent = useRef({ code: "", at: 0 });
-  const cameraWanted = useRef(camera);
-  cameraWanted.current = camera;
-  if (!enqueue.current) enqueue.current = scannerQueue();
   current.current = seriais;
   setter.current = setSeriais;
 
@@ -111,6 +66,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
     return () => {
       mounted.current = false;
       generation.current++;
+      photoDecoder.current?.close();
       if (audio.current) audio.current.close().catch(() => {});
     };
   }, []);
@@ -171,124 +127,234 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
   addRef.current = add;
 
   useEffect(() => {
-    if (!camera || paused) return;
+    const change = () => setHidden(document.hidden);
+    document.addEventListener("visibilitychange", change);
+    return () => document.removeEventListener("visibilitychange", change);
+  }, []);
+
+  useEffect(() => {
+    if (!camera || paused || hidden) {
+      setStatus("idle");
+      return;
+    }
     let cancelled = false,
-      scanner;
+      stream,
+      decoder,
+      timer,
+      detachEnded;
+    const video = videoRef.current;
+    const gate = confirmationGate();
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    let lastFrame = -1,
+      lastMode = modeRef.current,
+      frameNumber = 0,
+      misses = 0;
+    const cleanup = () => {
+      clearTimeout(timer);
+      detachEnded?.();
+      decoder?.close();
+      stopStream(stream);
+      if (streamRef.current === stream) streamRef.current = null;
+      if (video?.srcObject === stream) video.srcObject = null;
+    };
     setStatus("starting");
     setMessage("");
+    setHint("Mostre uma etiqueta em qualquer posição da imagem.");
+    setControls({});
+    setTorch(false);
     recent.current = { code: "", at: 0 };
-
-    enqueue
-      .current(async () => {
-        if (cancelled) return;
-        try {
-          if (
-            !window.isSecureContext ||
-            !navigator.mediaDevices?.getUserMedia
-          ) {
-            throw new Error("secure-context");
+    async function readFrame() {
+      if (cancelled) return;
+      const started = performance.now();
+      try {
+        if (video.closest("fieldset")?.disabled) {
+          gate.reset();
+          timer = setTimeout(readFrame, 125);
+          return;
+        }
+        if (
+          video.readyState >= 2 &&
+          video.videoWidth &&
+          video.currentTime !== lastFrame
+        ) {
+          lastFrame = video.currentTime;
+          const scanMode = modeRef.current;
+          if (lastMode !== scanMode) {
+            gate.reset();
+            lastMode = scanMode;
+            misses = 0;
           }
-
-          scanner = new Html5Qrcode(cameraId, config);
-
-          let currentDevices = devices;
-          try {
-            const available = await Html5Qrcode.getCameras();
-            if (available && available.length) {
-              currentDevices = available;
-              if (!cancelled) setDevices(available);
-            }
-          } catch {
-            /* Continua caso a enumeração prévia falhe */
+          const region = scanRegion(
+            video.videoWidth,
+            video.videoHeight,
+            scanMode,
+          );
+          // Most frames use a quick full-image pass. Periodically retain native
+          // pixels and try harder for smaller, tilted or inverted labels.
+          frameNumber++;
+          const profile =
+            misses >= 2 && frameNumber % 3 === 0 ? "accurate" : "fast";
+          const size = frameSize(region.width, region.height, profile);
+          if (canvas.width !== size.width || canvas.height !== size.height) {
+            canvas.width = size.width;
+            canvas.height = size.height;
           }
-
-          const targets = [];
-          if (device) {
-            targets.push(device);
+          ctx.drawImage(
+            video,
+            region.x,
+            region.y,
+            region.width,
+            region.height,
+            0,
+            0,
+            size.width,
+            size.height,
+          );
+          const results = await decoder.decode(
+            ctx.getImageData(0, 0, size.width, size.height),
+            scanMode,
+            profile,
+          );
+          misses = results.length ? 0 : misses + 1;
+          if (cancelled) return;
+          if (video.closest("fieldset")?.disabled) {
+            gate.reset();
+            timer = setTimeout(readFrame, 125);
+            return;
+          }
+          if (scanMode !== modeRef.current) {
+            gate.reset();
           } else {
-            targets.push({ facingMode: "environment" });
-            targets.push({ facingMode: "user" });
-            if (currentDevices.length > 0) {
-              targets.push(currentDevices[0].id || currentDevices[0].deviceId);
-            }
+            const observation = gate.observe(results, performance.now());
+            setHint(
+              observation.ambiguous
+                ? "Mais de um código visível. Isole uma etiqueta ou selecione QR Code / Barras."
+                : observation.result
+                  ? current.current.includes(observation.result.text)
+                    ? "Já conferido. Mostre o próximo equipamento."
+                    : `${observation.result.format} confirmado em ${observation.required} quadros.`
+                  : observation.count
+                    ? `Confirmando leitura (${observation.count}/${observation.required})…`
+                    : "Leitura da imagem inteira. Mostre o código nítido, sem precisar centralizar.",
+            );
+            if (
+              observation.result &&
+              !current.current.includes(observation.result.text)
+            )
+              addRef.current([observation.result.text], true);
           }
-
-          let started = false;
-          let lastError = null;
-
-          for (const target of targets) {
-            if (cancelled) break;
-            try {
-              await scanner.start(
-                target,
-                {
-                  fps: 15,
-                  // Retângulo de alta precisão calibrado para IMEIs (largura ampla e altura reduzida)
-                  qrbox: (viewfinderWidth, viewfinderHeight) => ({
-                    width: Math.floor(Math.min(viewfinderWidth * 0.88, 380)),
-                    height: Math.floor(Math.min(viewfinderHeight * 0.45, 150)),
-                  }),
-                },
-                (code) => {
-                  if (!cancelled) addRef.current([code], true);
-                },
-                () => {},
-              );
-              started = true;
-              break;
-            } catch (err) {
-              lastError = err;
-              if (/NotAllowed|Permission|denied/i.test(err?.name || String(err))) {
-                throw err;
-              }
-            }
-          }
-
-          if (!started && lastError) throw lastError;
+        }
+        // Sequential loop: never overlap decoding work or repeatedly confirm one frame.
+        if (!cancelled)
+          timer = setTimeout(
+            readFrame,
+            Math.max(16, 66 - (performance.now() - started)),
+          );
+      } catch (error) {
+        if (cancelled) return;
+        cleanup();
+        setStatus("error");
+        setMessage(
+          error.message || "A leitura foi interrompida. Tente novamente.",
+        );
+      }
+    }
+    (async () => {
+      try {
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
+          throw new Error("secure-context");
+        decoder = createDecoder();
+        await decoder.ready();
+        if (cancelled) return;
+        stream = await navigator.mediaDevices.getUserMedia(
+          cameraConstraints(device),
+        );
+        // Permission dialogs may settle after closing, changing camera or unmounting.
+        if (cancelled) {
+          stopStream(stream);
+          return;
+        }
+        streamRef.current = stream;
+        video.srcObject = stream;
+        await video.play();
+        if (cancelled) return;
+        const track = stream.getVideoTracks()[0];
+        const ended = () => {
           if (cancelled) return;
-          setStatus("active");
-        } catch (e) {
-          await releaseScanner(scanner).catch(() => {});
-          scanner = null;
-          if (cancelled) return;
+          cleanup();
           setStatus("error");
           setMessage(
-            e?.message === "secure-context"
-              ? `A câmera requer HTTPS e permissão de acesso no navegador.`
-              : cameraError(e),
+            "A câmera foi desconectada ou interrompida. Tente novamente.",
           );
+        };
+        track.addEventListener("ended", ended);
+        detachEnded = () => track.removeEventListener("ended", ended);
+        const capabilities = await tuneCamera(track);
+        if (cancelled) return;
+        setControls(capabilities);
+        setZoom(track.getSettings?.().zoom || capabilities.zoom?.min || 1);
+        setDimensions({ width: video.videoWidth, height: video.videoHeight });
+        try {
+          const available = await navigator.mediaDevices.enumerateDevices();
+          if (!cancelled)
+            setDevices(available.filter((d) => d.kind === "videoinput"));
+        } catch {
+          /* Selection remains optional when enumeration is unavailable. */
         }
-      })
-      .catch(() => {});
-
+        if (cancelled) return;
+        setStatus("active");
+        readFrame();
+      } catch (error) {
+        cleanup();
+        if (cancelled) return;
+        setStatus("error");
+        setMessage(
+          error.message === "secure-context"
+            ? "A câmera requer HTTPS ou localhost e permissão de acesso."
+            : cameraError(error),
+        );
+      }
+    })();
     return () => {
       cancelled = true;
-      enqueue
-        .current(async () => {
-          await releaseScanner(scanner, document.getElementById(cameraId));
-          if (mounted.current && !cameraWanted.current) setStatus("idle");
-        })
-        .catch(() => {});
+      cleanup();
     };
-  }, [camera, paused, device, retry, cameraId]);
+  }, [camera, paused, hidden, device, retry]);
+
+  async function cameraControl(name, value) {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    try {
+      await track.applyConstraints({ advanced: [{ [name]: value }] });
+      if (streamRef.current?.getVideoTracks()[0] !== track) return;
+      if (name === "torch") setTorch(value);
+      else setZoom(value);
+    } catch {
+      setMessage("Esse ajuste não é suportado pela câmera atual.");
+    }
+  }
 
   async function photos(e) {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
     if (!files.length || importing.current) return;
     if (files.length > 100) {
-      setMessage(`Envie no máximo 100 fotos por vez.`);
+      setMessage("Envie no máximo 100 fotos por vez.");
       return;
     }
     importing.current = true;
     setBusy(true);
     const token = generation.current;
     const alive = () => mounted.current && token === generation.current;
-    let scanner,
-      failures = 0;
+    let decoder,
+      failures = 0,
+      ambiguous = 0;
     const codes = [];
     try {
-      scanner = new Html5Qrcode(fileId, config);
+      decoder = createDecoder();
+      photoDecoder.current = decoder;
+      await decoder.ready();
       for (const [index, file] of files.entries()) {
         if (!alive()) break;
         setProgress(`${index + 1}/${files.length}`);
@@ -296,10 +362,33 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           failures++;
           continue;
         }
+        let url;
         try {
-          codes.push(await scanner.scanFile(file, false));
+          url = URL.createObjectURL(file);
+          const image = new Image();
+          image.src = url;
+          await image.decode();
+          if (!alive()) break;
+          const scale = Math.min(
+            1,
+            3200 / Math.max(image.naturalWidth, image.naturalHeight),
+          );
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const results = await decoder.decode(
+            ctx.getImageData(0, 0, canvas.width, canvas.height),
+            modeRef.current,
+          );
+          if (results.length === 1) codes.push(results[0].text);
+          else if (results.length > 1) ambiguous++;
+          else failures++;
         } catch {
           failures++;
+        } finally {
+          if (url) URL.revokeObjectURL(url);
         }
       }
       if (alive()) {
@@ -320,14 +409,15 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
           setLastCode(current.current[0]);
         }
         setMessage(
-          `${added} serial(is) adicionado(s); ${codes.length - added - rejected} repetido(s); ${failures} foto(s) sem leitura; ${rejected} código(s) inválido(s).`,
+          `${added} serial(is) adicionado(s); ${codes.length - added - rejected} repetido(s); ${failures} foto(s) sem leitura; ${ambiguous} foto(s) com vários códigos (isole uma etiqueta); ${rejected} código(s) inválido(s).`,
         );
       }
-    } catch {
+    } catch (error) {
       if (alive())
-        setMessage(`Não foi possível analisar as fotos. Tente novamente.`);
+        setMessage(error.message || "Não foi possível analisar as fotos.");
     } finally {
-      await releaseScanner(scanner).catch(() => {});
+      decoder?.close();
+      if (photoDecoder.current === decoder) photoDecoder.current = null;
       importing.current = false;
       if (alive()) {
         setBusy(false);
@@ -359,14 +449,13 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
       className="serial-reader"
       aria-label="Leitor de QR Code e código de barras"
     >
-      <div id={fileId} className="scanner-file-host" aria-hidden="true" />
       <div className="reader-heading">
         <span className="reader-symbol">
           <ScanLine size={20} />
         </span>
         <div>
           <h3>Adicionar equipamentos</h3>
-          <p>QR Code, código de barras ou serial</p>
+          <p>Leitura rápida · QR Code e barras</p>
         </div>
         <span className="reader-count">
           {seriais.length}/{MAX_BATCH}
@@ -431,7 +520,19 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
         disabled={busy}
         onChange={txt}
       />
-      <div className="reader-camera" hidden={!camera && status === "idle"}>
+      <div className="reader-scan-mode">
+        <label htmlFor={`mode-${id}`}>Tipo de leitura</label>
+        <select
+          id={`mode-${id}`}
+          value={mode}
+          onChange={(e) => setMode(e.target.value)}
+        >
+          <option value="auto">Automático: QR Code e barras</option>
+          <option value="qr">Somente QR Code</option>
+          <option value="barcode">Somente código de barras</option>
+        </select>
+      </div>
+      <div className="reader-camera" hidden={!camera}>
         <div className="reader-camera-toolbar">
           <label htmlFor={`device-${id}`}>Câmera</label>
           <select
@@ -457,12 +558,33 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
             {paused ? <Play size={18} /> : <Pause size={18} />}
           </button>
         </div>
-        <div className="reader-viewfinder">
-          <div id={cameraId} className="reader-video" />
+        <div
+          className="reader-viewfinder"
+          style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}
+        >
+          <video
+            ref={videoRef}
+            className="reader-video"
+            autoPlay
+            muted
+            playsInline
+          />
           {status === "active" && !paused && (
-            <div className="reader-frame" aria-hidden="true" />
+            <div
+              className="reader-frame"
+              aria-hidden="true"
+              style={(() => {
+                const r = scanRegion(dimensions.width, dimensions.height, mode);
+                return {
+                  left: `${(r.x / dimensions.width) * 100}%`,
+                  top: `${(r.y / dimensions.height) * 100}%`,
+                  width: `${(r.width / dimensions.width) * 100}%`,
+                  height: `${(r.height / dimensions.height) * 100}%`,
+                };
+              })()}
+            />
           )}
-          {(paused || status !== "active") && (
+          {(paused || hidden || status !== "active") && (
             <div className="reader-camera-placeholder">
               {status === "starting" && !paused ? (
                 <LoaderCircle size={28} className="is-spinning" />
@@ -470,11 +592,13 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
                 <Camera size={28} />
               )}
               <span className="px-4 text-center">
-                {paused
-                  ? "Leitura pausada"
-                  : status === "error"
-                    ? message || "Câmera indisponível"
-                    : "Aguardando acesso à câmera…"}
+                {hidden
+                  ? "Leitura pausada enquanto esta aba está em segundo plano"
+                  : paused
+                    ? "Leitura pausada"
+                    : status === "error"
+                      ? message || "Câmera indisponível"
+                      : "Aguardando acesso à câmera…"}
               </span>
               {status === "error" && !paused && (
                 <button type="button" onClick={() => setRetry((v) => v + 1)}>
@@ -484,8 +608,41 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
             </div>
           )}
         </div>
-        <p className="reader-camera-tip">
-          Em webcams de PC, posicione o código a cerca de 15 a 20 cm da lente para foco ideal.
+        {status === "active" && (
+          <div className="reader-camera-controls">
+            <span>
+              {dimensions.width} × {dimensions.height}
+            </span>
+            {controls.torch && (
+              <button
+                type="button"
+                aria-pressed={torch}
+                onClick={() => cameraControl("torch", !torch)}
+              >
+                {torch ? "Desligar lanterna" : "Ligar lanterna"}
+              </button>
+            )}
+            {controls.zoom && (
+              <label>
+                Zoom
+                <input
+                  type="range"
+                  aria-label="Zoom da câmera"
+                  min={controls.zoom.min}
+                  max={controls.zoom.max}
+                  step={controls.zoom.step || 0.1}
+                  value={zoom}
+                  onChange={(e) =>
+                    cameraControl("zoom", Number(e.target.value))
+                  }
+                />
+              </label>
+            )}
+          </div>
+        )}
+        <p className="reader-camera-tip" role="status">
+          {hint ||
+            "Mostre uma etiqueta por vez em qualquer posição da imagem. Ajuste a distância até ficar nítida."}
         </p>
       </div>
       <label className="reader-manual-label" htmlFor={`manual-${id}`}>

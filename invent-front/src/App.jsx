@@ -1,16 +1,46 @@
 import {
-  lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import {
-  Activity, Bell, BellOff, Box, ChevronRight, ClipboardList,
-  LayoutDashboard, LogOut, Menu, PackagePlus, RefreshCw, Search,
-  Settings, ShoppingCart, Truck, Undo2, UserPlus, Wrench, X, AlertTriangle,
+  Activity,
+  Bell,
+  BellOff,
+  Box,
+  ChevronRight,
+  ClipboardList,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  PackagePlus,
+  RefreshCw,
+  Search,
+  Settings,
+  ShoppingCart,
+  Truck,
+  Undo2,
+  UserPlus,
+  Wrench,
+  X,
+  AlertTriangle,
 } from "lucide-react";
 import { api, errorMessage, saveToken } from "./lib/api";
 import {
-  TelaEntrada, TelaTransferencia, TelaInstalacao, TelaEstorno,
-  TelaRastreioTriagem, TelaEquipamentos, TelaCompras,
-  TelaTecnicos, TelaLogs, TelaConfiguracao,
+  TelaEntrada,
+  TelaTransferencia,
+  TelaInstalacao,
+  TelaEstorno,
+  TelaRastreioTriagem,
+  TelaEquipamentos,
+  TelaCompras,
+  TelaTecnicos,
+  TelaLogs,
+  TelaConfiguracao,
 } from "./components/screens";
 
 const Dashboard = lazy(() => import("./components/Dashboard"));
@@ -45,9 +75,7 @@ const groups = [
 const preferenceKey = "invent.notifications.enabled";
 
 const permission = () =>
-  typeof Notification === "undefined"
-    ? "unsupported"
-    : Notification.permission;
+  typeof Notification === "undefined" ? "unsupported" : Notification.permission;
 
 function remember(enabled) {
   try {
@@ -89,8 +117,7 @@ export default function App() {
     .flatMap((group) => group.items)
     .find((item) => item[0] === tab)?.[1];
 
-  const notificationsOn =
-    notifyEnabled && notifyPermission === "granted";
+  const notificationsOn = notifyEnabled && notifyPermission === "granted";
 
   const reload = useCallback(async () => {
     const id = ++requestId.current;
@@ -98,8 +125,13 @@ export default function App() {
 
     try {
       const paths = [
-        "produtos", "tecnicos", "estoque-tecnicos", "logs",
-        "previsao-compras", "imeis", "dashboard",
+        "produtos",
+        "tecnicos",
+        "estoque-tecnicos",
+        "logs",
+        "previsao-compras",
+        "imeis",
+        "dashboard",
       ];
       const responses = await Promise.all(
         paths.map((path) => api.get(`/${path}`)),
@@ -107,12 +139,17 @@ export default function App() {
 
       if (id !== requestId.current) return;
 
-      const [
-        produtos, tecnicos, estoque, logs, previsao, imeis, dashboard,
-      ] = responses.map((response) => response.data);
+      const [produtos, tecnicos, estoque, logs, previsao, imeis, dashboard] =
+        responses.map((response) => response.data);
 
       setData({
-        produtos, tecnicos, estoque, logs, previsao, imeis, dashboard,
+        produtos,
+        tecnicos,
+        estoque,
+        logs,
+        previsao,
+        imeis,
+        dashboard,
       });
       setUpdated(new Date());
       setError("");
@@ -125,7 +162,9 @@ export default function App() {
 
   useEffect(() => {
     reload();
-    return () => { requestId.current++; };
+    return () => {
+      requestId.current++;
+    };
   }, [reload]);
 
   useEffect(() => {
@@ -167,10 +206,7 @@ export default function App() {
       };
 
       current.quantidade += Number(p.quantidade_matriz || 0);
-      current.minimo = Math.max(
-        current.minimo,
-        Number(p.estoque_minimo || 0),
-      );
+      current.minimo = Math.max(current.minimo, Number(p.estoque_minimo || 0));
       categories.set(category, current);
     });
 
@@ -219,12 +255,9 @@ export default function App() {
   useEffect(() => {
     if (!notificationsOn || loading || error) return;
 
-    const key = (item) =>
-      `${item.key}:${item.quantidade}:${item.minimo}`;
+    const key = (item) => `${item.key}:${item.quantidade}:${item.minimo}`;
 
-    const fresh = alerts.filter(
-      (item) => !notified.current.has(key(item)),
-    );
+    const fresh = alerts.filter((item) => !notified.current.has(key(item)));
     notified.current = new Set(alerts.map(key));
 
     if (!fresh.length) return;
@@ -236,9 +269,7 @@ export default function App() {
         body:
           `${first.nome} · ${first.categoria}: ` +
           `${first.quantidade} unidade(s).` +
-          (fresh.length > 1
-            ? ` E mais ${fresh.length - 1} alerta(s).`
-            : ""),
+          (fresh.length > 1 ? ` E mais ${fresh.length - 1} alerta(s).` : ""),
         tag: "invent-stock",
       });
     } catch {
@@ -255,7 +286,7 @@ export default function App() {
     if (current === "denied") {
       setNotice(
         "As notificações estão bloqueadas. Libere a permissão " +
-        "nas configurações deste site no navegador.",
+          "nas configurações deste site no navegador.",
       );
       return;
     }
@@ -291,9 +322,7 @@ export default function App() {
           : "Permissão não concedida. Os alertas continuam disponíveis no painel.",
       );
     } catch {
-      setNotice(
-        "Não foi possível ativar as notificações neste navegador.",
-      );
+      setNotice("Não foi possível ativar as notificações neste navegador.");
     }
   }
 
@@ -326,9 +355,13 @@ export default function App() {
         className={`app-sidebar ${menu ? "is-open" : ""}`}
       >
         <div className="brand">
-          <span className="brand-mark"><Box size={23} /></span>
+          <span className="brand-mark">
+            <Box size={23} />
+          </span>
           <div>
-            <strong>Estoque<span>Pro</span></strong>
+            <strong>
+              Estoque<span>Pro</span>
+            </strong>
             <small>Inventário & rastreamento</small>
           </div>
           <button
@@ -417,9 +450,11 @@ export default function App() {
               disabled={notifyPermission === "unsupported"}
               onClick={toggleNotifications}
             >
-              {notificationsOn || notifyPermission === "default"
-                ? <Bell size={20} />
-                : <BellOff size={20} />}
+              {notificationsOn || notifyPermission === "default" ? (
+                <Bell size={20} />
+              ) : (
+                <BellOff size={20} />
+              )}
               {notificationsOn && <span className="notification-dot" />}
             </button>
 
@@ -441,11 +476,11 @@ export default function App() {
                   : error
                     ? "Falha na atualização"
                     : `Última atualização às ${
-                      updated?.toLocaleTimeString("pt-BR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }) || "—"
-                    }`}
+                        updated?.toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }) || "—"
+                      }`}
             </span>
 
             <button
@@ -453,10 +488,7 @@ export default function App() {
               disabled={loading || busy}
               onClick={reload}
             >
-              <RefreshCw
-                size={15}
-                className={loading ? "is-spinning" : ""}
-              />
+              <RefreshCw size={15} className={loading ? "is-spinning" : ""} />
               Atualizar
             </button>
           </div>
@@ -481,9 +513,7 @@ export default function App() {
                   <strong>
                     {alerts.length} ponto(s) de atenção no estoque
                   </strong>
-                  <small>
-                    Confira os saldos abaixo do mínimo configurado.
-                  </small>
+                  <small>Confira os saldos abaixo do mínimo configurado.</small>
                 </span>
                 <ChevronRight className="alert-chevron" size={18} />
               </summary>
@@ -554,18 +584,15 @@ export default function App() {
                     reload={reload}
                   />
                 )}
-               {tab === "rastreio" && (
-                 <TelaRastreioTriagem
-                   imeisGlobais={data.imeis}
-                   produtos={data.produtos}
-                   reload={reload}
-                />
-              )}
-                {tab === "equipamentos" && (
-                  <TelaEquipamentos
+                {tab === "rastreio" && (
+                  <TelaRastreioTriagem
+                    imeisGlobais={data.imeis}
                     produtos={data.produtos}
                     reload={reload}
                   />
+                )}
+                {tab === "equipamentos" && (
+                  <TelaEquipamentos produtos={data.produtos} reload={reload} />
                 )}
                 {tab === "compras" && (
                   <TelaCompras

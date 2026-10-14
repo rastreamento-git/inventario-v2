@@ -23,7 +23,7 @@ a API pode funcionar sem senha; em produção ela exige senha e segredo de sess�
 
 ## Nuvem
 
-Hospedagem estática: comando de build `npm ci && npm run build`, diretório `dist`.
+Hospedagem estática: comando de build `npm ci --include=dev && npm run build`, diretório `dist`.
 Configure `VITE_API_URL=https://SEU-BACKEND/api` **antes do build** e inclua o domínio
 exato do frontend em `CORS_ORIGINS` no backend. Para preservar o serviço do projeto
 original, o endereço anteriormente usado era `https://estoque-api-7l82.onrender.com/api`;
@@ -56,3 +56,9 @@ interface funcionam mesmo sem suporte a Notification, e incluem estoque zerado.
 A sessão fica em sessionStorage, é enviada como Bearer e dura até oito horas.
 Sair remove o token deste navegador. A senha é compartilhada: esta versão não
 implementa usuários individuais, funções ou permissões por técnico.
+
+## Scanner desta revisão
+
+O leitor usa zxing-wasm 3.1.5 em Web Worker. O Vite publica o arquivo WASM no próprio domínio; não requer CDN ou API externa. Modos QR/Barras/Automático com imagem inteira, captura preferencial 1080p, autofocus opcional, confirmação em dois quadros para formatos com verificação interna e três para os demais, com descarte de ambiguidades. Fotos usam o mesmo motor. Veja SCANNER_RAPIDO.md para resultados, implantação e limites de hardware. Publique todos os assets do build.
+
+Na Vercel, selecione Root Directory invent-front, Install Command npm ci --include=dev, Build Command npm run build e Output Directory dist. O vercel.json desta pasta também fixa esses três comandos/campos. A instalação precisa incluir devDependencies, pois Vite e plugins são ferramentas de build.

@@ -821,14 +821,18 @@ export function TelaEstorno({
 // ==========================================
 // TELA RASTREIO (COM BUSCA GLOBAL)
 // ==========================================
-export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }) {
+export function TelaRastreioTriagem({
+  imeisGlobais = [],
+  produtos = [],
+  reload,
+}) {
   const [seriaisRecebidos, setSeriaisRecebidos] = useState([]);
   const [filtroStatus, setFiltroStatus] = useState("TODOS");
   const [filtroTipo, setFiltroTipo] = useState("TODOS");
   const [busca, setBusca] = useState("");
   const [historico, setHistorico] = useState(null);
   const [archivedItems, setArchivedItems] = useState(null);
-  
+
   // Estado para o modal de reclassificação/mover
   const [itemParaMover, setItemParaMover] = useState(null);
   const [novoProdutoId, setNovoProdutoId] = useState("");
@@ -897,9 +901,12 @@ export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }
     }
     setSalvandoMudanca(true);
     try {
-      await api.put(`/imeis/${encodeURIComponent(itemParaMover.codigo_serial)}`, {
-        produto_id: Number(novoProdutoId),
-      });
+      await api.put(
+        `/imeis/${encodeURIComponent(itemParaMover.codigo_serial)}`,
+        {
+          produto_id: Number(novoProdutoId),
+        },
+      );
       alert(`Equipamento ${itemParaMover.codigo_serial} movido com sucesso!`);
       setItemParaMover(null);
       setNovoProdutoId("");
@@ -920,17 +927,35 @@ export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }
     if (filtroStatus !== "TODOS" && i.status !== filtroStatus) return false;
 
     // 2. Filtro por tipo/categoria
-    const categoriaNormalizada = (i.categoria || i.tipo || "SEM_TIPO").toUpperCase();
-    if (filtroTipo === "SEM_TIPO" && categoriaNormalizada !== "SEM_TIPO") return false;
-    if (filtroTipo !== "TODOS" && filtroTipo !== "SEM_TIPO" && categoriaNormalizada !== filtroTipo) return false;
+    const categoriaNormalizada = (
+      i.categoria ||
+      i.tipo ||
+      "SEM_TIPO"
+    ).toUpperCase();
+    if (filtroTipo === "SEM_TIPO" && categoriaNormalizada !== "SEM_TIPO")
+      return false;
+    if (
+      filtroTipo !== "TODOS" &&
+      filtroTipo !== "SEM_TIPO" &&
+      categoriaNormalizada !== filtroTipo
+    )
+      return false;
 
     // 3. Busca por texto (abrange NT-40, modelo, serial e itens sem tipo)
     if (!termo) return true;
 
-    const serialMatch = String(i.codigo_serial || "").toLowerCase().includes(termo);
-    const produtoMatch = String(i.produto || i.nome || "").toLowerCase().includes(termo);
-    const modeloMatch = String(i.modelo || "").toLowerCase().includes(termo);
-    const categoriaMatch = String(i.categoria || i.tipo || "sem tipo").toLowerCase().includes(termo);
+    const serialMatch = String(i.codigo_serial || "")
+      .toLowerCase()
+      .includes(termo);
+    const produtoMatch = String(i.produto || i.nome || "")
+      .toLowerCase()
+      .includes(termo);
+    const modeloMatch = String(i.modelo || "")
+      .toLowerCase()
+      .includes(termo);
+    const categoriaMatch = String(i.categoria || i.tipo || "sem tipo")
+      .toLowerCase()
+      .includes(termo);
 
     return serialMatch || produtoMatch || modeloMatch || categoriaMatch;
   });
@@ -945,7 +970,11 @@ export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }
               Mover / Corrigir Equipamento
             </h3>
             <p className="text-xs text-gray-500 mb-4">
-              Altere o modelo e categoria associados ao serial <strong className="font-mono text-teal-700">{itemParaMover.codigo_serial}</strong>.
+              Altere o modelo e categoria associados ao serial{" "}
+              <strong className="font-mono text-teal-700">
+                {itemParaMover.codigo_serial}
+              </strong>
+              .
             </p>
 
             <form onSubmit={salvarReclassificacao} className="space-y-4">
@@ -954,7 +983,8 @@ export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }
                   Modelo Atual:
                 </label>
                 <div className="p-2.5 bg-gray-50 border rounded-lg text-sm text-gray-700">
-                  [{itemParaMover.categoria || "SEM TIPO"}] {itemParaMover.produto || "Não definido"}
+                  [{itemParaMover.categoria || "SEM TIPO"}]{" "}
+                  {itemParaMover.produto || "Não definido"}
                 </div>
               </div>
 
@@ -1055,7 +1085,8 @@ export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }
               <Search className="mr-2" /> Rastreabilidade Global
             </h2>
             <p className="text-xs text-gray-500 mt-1">
-              Total de registros exibidos: <strong>{imeisFiltrados.length}</strong>
+              Total de registros exibidos:{" "}
+              <strong>{imeisFiltrados.length}</strong>
             </p>
           </div>
 
@@ -1129,8 +1160,12 @@ export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }
             <tbody>
               {imeisFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-500 text-sm">
-                    Nenhum equipamento encontrado para o filtro "{busca || filtroTipo}".
+                  <td
+                    colSpan={5}
+                    className="p-8 text-center text-gray-500 text-sm"
+                  >
+                    Nenhum equipamento encontrado para o filtro "
+                    {busca || filtroTipo}".
                   </td>
                 </tr>
               ) : (
@@ -1154,14 +1189,20 @@ export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }
                       )}
                     </td>
                     <td className="p-4 font-medium">
-                      <span className={`inline-block mr-2 px-1.5 py-0.5 rounded text-xs font-bold ${
-                        !i.categoria && !i.tipo
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-slate-100 text-slate-700"
-                      }`}>
+                      <span
+                        className={`inline-block mr-2 px-1.5 py-0.5 rounded text-xs font-bold ${
+                          !i.categoria && !i.tipo
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
                         {i.categoria || i.tipo || "SEM TIPO"}
                       </span>
-                      {i.produto || <span className="text-gray-400 italic">Modelo não definido</span>}
+                      {i.produto || (
+                        <span className="text-gray-400 italic">
+                          Modelo não definido
+                        </span>
+                      )}
                     </td>
                     <td className="p-4">
                       <span
@@ -1186,7 +1227,9 @@ export function TelaRastreioTriagem({ imeisGlobais = [], produtos = [], reload }
                         type="button"
                         onClick={() => {
                           setItemParaMover(i);
-                          setNovoProdutoId(i.produto_id ? String(i.produto_id) : "");
+                          setNovoProdutoId(
+                            i.produto_id ? String(i.produto_id) : "",
+                          );
                         }}
                         className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition"
                         title="Mover para outro modelo ou corrigir tipo"

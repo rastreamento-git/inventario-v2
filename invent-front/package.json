@@ -1,7 +1,7 @@
 {
   "name": "invent-front",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,11 +15,11 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.20.0",
-    "html5-qrcode": "^2.3.8",
     "lucide-react": "^1.48.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "zxing-wasm": "3.1.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
@@ -28,6 +28,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.6.1",
     "oxlint": "^1.81.0",
+    "pngjs": "7.0.0",
     "postcss": "^8.5.28",
     "prettier": "^3.9.10",
     "tailwindcss": "^4.3.3",

@@ -1,0 +1,186 @@
+[
+  {
+    "file": "qr.png",
+    "text": "001234567890123",
+    "format": "QRCode"
+  },
+  {
+    "file": "qr-rotated90.png",
+    "text": "001234567890123",
+    "format": "QRCode"
+  },
+  {
+    "file": "qr-tilted.png",
+    "text": "001234567890123",
+    "format": "QRCode"
+  },
+  {
+    "file": "qr-lowcontrast.png",
+    "text": "001234567890123",
+    "format": "QRCode"
+  },
+  {
+    "file": "qr-inverted.png",
+    "text": "001234567890123",
+    "format": "QRCode"
+  },
+  {
+    "file": "qr-softfocus.png",
+    "text": "001234567890123",
+    "format": "QRCode"
+  },
+  {
+    "file": "code128.png",
+    "text": "001234567890123",
+    "format": "Code128"
+  },
+  {
+    "file": "code128-rotated90.png",
+    "text": "001234567890123",
+    "format": "Code128"
+  },
+  {
+    "file": "code128-tilted.png",
+    "text": "001234567890123",
+    "format": "Code128"
+  },
+  {
+    "file": "code128-lowcontrast.png",
+    "text": "001234567890123",
+    "format": "Code128"
+  },
+  {
+    "file": "code128-inverted.png",
+    "text": "001234567890123",
+    "format": "Code128"
+  },
+  {
+    "file": "code128-softfocus.png",
+    "text": "001234567890123",
+    "format": "Code128"
+  },
+  {
+    "file": "code39.png",
+    "text": "SN-001234",
+    "format": "Code39"
+  },
+  {
+    "file": "code93.png",
+    "text": "SN-009321",
+    "format": "Code93"
+  },
+  {
+    "file": "ean13.png",
+    "text": "7891234567895",
+    "format": "EAN13"
+  },
+  {
+    "file": "ean13-rotated90.png",
+    "text": "7891234567895",
+    "format": "EAN13"
+  },
+  {
+    "file": "ean13-tilted.png",
+    "text": "7891234567895",
+    "format": "EAN13"
+  },
+  {
+    "file": "ean13-lowcontrast.png",
+    "text": "7891234567895",
+    "format": "EAN13"
+  },
+  {
+    "file": "ean13-inverted.png",
+    "text": "7891234567895",
+    "format": "EAN13"
+  },
+  {
+    "file": "ean13-softfocus.png",
+    "text": "7891234567895",
+    "format": "EAN13"
+  },
+  {
+    "file": "ean8.png",
+    "text": "96385074",
+    "format": "EAN8"
+  },
+  {
+    "file": "upca.png",
+    "text": "0012345678905",
+    "format": "EAN13"
+  },
+  {
+    "file": "itf.png",
+    "text": "00123456789014",
+    "format": "ITF"
+  },
+  {
+    "file": "codabar.png",
+    "text": "A123456A",
+    "format": "Codabar"
+  },
+  {
+    "file": "blank.png",
+    "text": null
+  },
+  {
+    "file": "multiple.png",
+    "text": "001234567890123",
+    "format": "multiple-same-value"
+  },
+  {
+    "file": "multiple-distinct.png",
+    "texts": [
+      "001234567890123",
+      "SN-001234"
+    ]
+  },
+  {
+    "file": "qr-top-left.png",
+    "text": "001234567890123",
+    "format": "QRCode",
+    "offcenter": true
+  },
+  {
+    "file": "qr-top-right.png",
+    "text": "001234567890123",
+    "format": "QRCode",
+    "offcenter": true
+  },
+  {
+    "file": "qr-bottom-left.png",
+    "text": "001234567890123",
+    "format": "QRCode",
+    "offcenter": true
+  },
+  {
+    "file": "qr-bottom-right.png",
+    "text": "001234567890123",
+    "format": "QRCode",
+    "offcenter": true
+  },
+  {
+    "file": "code128-top-left.png",
+    "text": "001234567890123",
+    "format": "Code128",
+    "offcenter": true
+  },
+  {
+    "file": "code128-top-right.png",
+    "text": "001234567890123",
+    "format": "Code128",
+    "offcenter": true
+  },
+  {
+    "file": "code128-bottom-left.png",
+    "text": "001234567890123",
+    "format": "Code128",
+    "offcenter": true
+  },
+  {
+    "file": "code128-bottom-right.png",
+    "text": "001234567890123",
+    "format": "Code128",
+    "offcenter": true
+  }
+]
