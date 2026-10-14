@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Box } from "lucide-react";
 import { api, errorMessage, saveToken } from "../lib/api";
 import { SessionContext } from "../lib/session";
+import AppFooter from "./AppFooter";
 export default function AuthGate({ children }) {
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
@@ -57,69 +59,68 @@ export default function AuthGate({ children }) {
       <SessionContext.Provider value={user}>{children}</SessionContext.Provider>
     );
   return (
-    <main className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
-      <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 w-full max-w-md">
-        <h1 className="text-3xl font-bold text-slate-900 mb-3">
-          Estoque <span className="text-blue-600">Pro</span>
-        </h1>
-        {status === "loading" ? (
-          <p role="status">Conectando ao inventário…</p>
-        ) : status === "error" ? (
-          <>
-            <p role="alert" className="text-red-700 mb-4">
-              {error}
-            </p>
-            <button
-              onClick={check}
-              className="bg-blue-600 text-white rounded-lg p-3"
-            >
-              Tentar novamente
-            </button>
-          </>
-        ) : (
-          <form onSubmit={submitLogin} className="space-y-4">
-            <p className="text-slate-600">
-              Entre para consultar e movimentar equipamentos.
-            </p>
-            <label className="block font-medium" htmlFor="login">
-              Usuário
-            </label>
-            <input
-              id="login"
-              name="username"
-              autoComplete="username"
-              required
-              value={login}
-              onChange={(e) => setLogin(e.target.value)}
-              className="w-full border rounded-lg p-3"
-            />
-            <label className="block font-medium" htmlFor="password">
-              Senha de acesso
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              autoFocus
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border rounded-lg p-3"
-            />
-            {error && (
-              <p role="alert" className="text-red-700">
+    <main className="auth-page">
+      <div className="auth-layout">
+        <section className="auth-card" aria-labelledby="auth-title">
+          <div className="auth-brand">
+            <span className="brand-mark">
+              <Box size={24} aria-hidden="true" />
+            </span>
+            <div>
+              <h1 id="auth-title">
+                Estoque <span>Pro</span>
+              </h1>
+              <p>Inventário e rastreamento</p>
+            </div>
+          </div>
+          {status === "loading" ? (
+            <p role="status">Conectando ao inventário…</p>
+          ) : status === "error" ? (
+            <>
+              <p role="alert" className="text-red-700 mb-4">
                 {error}
               </p>
-            )}
-            <button
-              disabled={busy}
-              className="w-full bg-blue-600 text-white rounded-lg p-3 disabled:opacity-50"
-            >
-              {busy ? "Entrando…" : "Entrar"}
-            </button>
-          </form>
-        )}
-      </section>
+              <button onClick={check} className="primary-button">
+                Tentar novamente
+              </button>
+            </>
+          ) : (
+            <form onSubmit={submitLogin} className="auth-form">
+              <p className="auth-description">
+                Entre para consultar e movimentar equipamentos.
+              </p>
+              <label htmlFor="login">Usuário</label>
+              <input
+                id="login"
+                name="username"
+                autoComplete="username"
+                required
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+              />
+              <label htmlFor="password">Senha de acesso</label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                autoFocus
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              {error && (
+                <p role="alert" className="text-red-700">
+                  {error}
+                </p>
+              )}
+              <button disabled={busy} className="primary-button">
+                {busy ? "Entrando…" : "Entrar"}
+              </button>
+            </form>
+          )}
+        </section>
+      </div>
+      <AppFooter />
     </main>
   );
 }

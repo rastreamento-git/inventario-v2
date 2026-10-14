@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Filter,
@@ -13,10 +13,14 @@ import {
   LoaderCircle,
   MapPin,
   CheckCircle2,
+  RadioTower,
+  Tag,
+  ScanLine,
 } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { notify, confirmAction } from "../lib/feedback";
 import Modal from "./Modal";
+const LeitorSeriais = lazy(() => import("./LeitorSeriais"));
 const states = {
   MATRIZ: ["Na matriz", "mint"],
   TECNICO: ["Com técnico", "blue"],
@@ -92,6 +96,18 @@ export default function Traceability({
     [detailError, setDetailError] = useState(""),
     [nextModel, setNextModel] = useState(""),
     [saving, setSaving] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  function lookupSerial(codes) {
+    if (!codes.length) return;
+    setQ(codes[0]);
+    setStatus("TODOS");
+    setCategory("TODOS");
+    setTech("");
+    setArchive("todos");
+    setPage(1);
+    setScanOpen(false);
+    notify("Código lido. Consultando o equipamento.", "success");
+  }
   const detailRequest = useRef(0);
   useEffect(() => {
     setQ(initialSearch);
@@ -245,65 +261,24 @@ export default function Traceability({
             registradas.
           </p>
         </div>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => setRetry((v) => v + 1)}
-          disabled={loading}
-        >
-          <RefreshCw size={16} className={loading ? "is-spinning" : ""} />
-          Atualizar lista
-        </button>
-      </div>
-      <div className="trace-summary">
-        <button
-          className={
-            status === "TODOS" && archive === "todos" ? "is-active" : ""
-          }
-          type="button"
-          onClick={() => {
-            setStatus("TODOS");
-            setArchive("todos");
-            setPage(1);
-          }}
-        >
-          <Package size={18} />
-          <span>
-            Todos os registros<strong>{all}</strong>
-          </span>
-        </button>
-        {["MATRIZ", "TECNICO", "INSTALADO", "TRIAGEM"].map((key) => (
+        <div className="page-intro-actions">
           <button
-            key={key}
-            className={status === key ? "is-active" : ""}
             type="button"
-            onClick={() => {
-              setStatus(key);
-              setPage(1);
-            }}
+            className="primary-button"
+            onClick={() => setScanOpen(true)}
           >
-            <span>
-              {states[key][0]}
-              <strong>
-                {result.summary.find((s) => s.status === key)?.total || 0}
-              </strong>
-            </span>
+            <ScanLine size={17} /> Localizar pela câmera
           </button>
-        ))}
-        <button
-          type="button"
-          className={archive === "arquivados" ? "is-active" : ""}
-          onClick={() => {
-            setArchive("arquivados");
-            setStatus("TODOS");
-            setPage(1);
-          }}
-        >
-          <Archive size={18} />
-          <span>
-            Arquivados<strong>{archived}</strong>
-          </span>
-        </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setRetry((v) => v + 1)}
+            disabled={loading}
+          >
+            <RefreshCw size={16} className={loading ? "is-spinning" : ""} />
+            Atualizar lista
+          </button>
+        </div>
       </div>
       <div className="trace-card">
         <div className="trace-search">
@@ -396,6 +371,59 @@ export default function Traceability({
             </select>
           </label>
         </div>
+        <div className="trace-summary">
+          <button
+            className={
+              status === "TODOS" && archive === "todos" ? "is-active" : ""
+            }
+            type="button"
+            aria-pressed={status === "TODOS" && archive === "todos"}
+            onClick={() => {
+              setStatus("TODOS");
+              setArchive("todos");
+              setPage(1);
+            }}
+          >
+            <Package size={18} />
+            <span>
+              Todos os registros<strong>{all}</strong>
+            </span>
+          </button>
+          {["MATRIZ", "TECNICO", "INSTALADO", "TRIAGEM"].map((key) => (
+            <button
+              key={key}
+              className={status === key ? "is-active" : ""}
+              type="button"
+              aria-pressed={status === key}
+              onClick={() => {
+                setStatus(key);
+                setPage(1);
+              }}
+            >
+              <span>
+                {states[key][0]}
+                <strong>
+                  {result.summary.find((s) => s.status === key)?.total || 0}
+                </strong>
+              </span>
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-pressed={archive === "arquivados"}
+            className={archive === "arquivados" ? "is-active" : ""}
+            onClick={() => {
+              setArchive("arquivados");
+              setStatus("TODOS");
+              setPage(1);
+            }}
+          >
+            <Archive size={18} />
+            <span>
+              Arquivados<strong>{archived}</strong>
+            </span>
+          </button>
+        </div>
         <div className="trace-toolbar">
           <span>
             <Filter size={14} />
@@ -456,8 +484,7 @@ export default function Traceability({
               <table className="trace-table">
                 <thead>
                   <tr>
-                    <th>IMEI / Serial</th>
-                    <th>Modelo / Tipo</th>
+                    <th>Equipamento / Serial</th>
                     <th>Status</th>
                     <th>Localização / Técnico</th>
                     <th>Última atualização</th>
@@ -470,31 +497,41 @@ export default function Traceability({
                   {result.rows.map((row) => (
                     <tr key={row.codigo_serial}>
                       <td>
-                        <button
-                          type="button"
-                          className="serial-link"
-                          onClick={() => details(row)}
-                        >
-                          {row.codigo_serial}
-                        </button>
-                        {row.arquivado && (
-                          <small className="archive-label">Arquivado</small>
-                        )}
-                        {row.origem === "historico" && (
-                          <small className="archive-label">
-                            Registro histórico
-                          </small>
-                        )}
-                      </td>
-                      <td>
-                        <strong>
-                          {row.produto || "Modelo não cadastrado"}
-                        </strong>
-                        <small>
-                          {row.categoria === "SEM_TIPO"
-                            ? "Sem tipo definido"
-                            : row.categoria}
-                        </small>
+                        <div className="trace-equipment">
+                          <span
+                            className="trace-equipment-icon"
+                            aria-hidden="true"
+                          >
+                            {row.categoria === "TAG" ? (
+                              <Tag size={18} />
+                            ) : (
+                              <RadioTower size={18} />
+                            )}
+                          </span>
+                          <div>
+                            <button
+                              type="button"
+                              className="serial-link"
+                              onClick={() => details(row)}
+                            >
+                              {row.codigo_serial}
+                            </button>
+                            <small className="trace-model">
+                              {row.produto || "Modelo não cadastrado"}
+                              {row.categoria &&
+                                row.categoria !== row.produto &&
+                                ` · ${row.categoria === "SEM_TIPO" ? "Sem tipo definido" : row.categoria}`}
+                            </small>
+                            {row.arquivado && (
+                              <small className="archive-label">Arquivado</small>
+                            )}
+                            {row.origem === "historico" && (
+                              <small className="archive-label">
+                                Registro histórico
+                              </small>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td>
                         <Badge status={row.status} />
@@ -624,6 +661,27 @@ export default function Traceability({
           </div>
         </div>
       </div>
+      {scanOpen && (
+        <Modal
+          title="Localizar equipamento"
+          onClose={() => setScanOpen(false)}
+          wide
+        >
+          <div className="trace-scanner">
+            <p className="field-hint">
+              Leia uma etiqueta para consultar o equipamento e seu histórico.
+              Você também pode enviar uma foto ou digitar o código.
+            </p>
+            <Suspense fallback={<p role="status">Preparando leitor…</p>}>
+              <LeitorSeriais
+                seriais={[]}
+                setSeriais={lookupSerial}
+                initialCamera
+              />
+            </Suspense>
+          </div>
+        </Modal>
+      )}
       {selected && (
         <Modal
           title="Histórico do equipamento"

@@ -49,6 +49,7 @@ import { useSession } from "./lib/session";
 import { notify } from "./lib/feedback";
 import { commandFor, keySequence } from "./lib/easter-eggs";
 import Feedback from "./components/Feedback";
+import AppFooter from "./components/AppFooter";
 const Traceability = lazy(() => import("./components/Traceability"));
 const AdminTools = lazy(() => import("./components/AdminTools"));
 const Dashboard = lazy(() => import("./components/Dashboard"));
@@ -56,23 +57,28 @@ const Dashboard = lazy(() => import("./components/Dashboard"));
 const groups = [
   {
     label: "Visão geral",
-    items: [["dashboard", "Dashboard", LayoutDashboard]],
+    items: [["dashboard", "Painel de controle", LayoutDashboard]],
   },
   {
-    label: "Movimentações",
+    label: "Produção",
     items: [
       ["entrada", "Entrada na matriz", PackagePlus],
       ["transferencia", "Carga para técnico", Truck],
       ["instalacao", "Instalações", Wrench],
       ["estorno", "Devoluções e estornos", Undo2],
+    ],
+  },
+  {
+    label: "Inventário",
+    items: [
       ["rastreio", "Rastreabilidade global", Search],
       ["triagem", "Triagem e reuso", ShieldCheck],
+      ["equipamentos", "Equipamentos", Box],
     ],
   },
   {
     label: "Gestão",
     items: [
-      ["equipamentos", "Equipamentos", Box],
       ["compras", "Previsão de compras", ShoppingCart],
       ["tecnicos", "Equipe técnica", UserPlus],
       ["logs", "Histórico", ClipboardList],
@@ -430,7 +436,7 @@ export default function App() {
           </span>
           <div>
             <strong>
-              Estoque<span>Pro</span>
+              Estoque <span>Pro</span>
             </strong>
             <small>Inventário & rastreamento</small>
           </div>
@@ -504,7 +510,7 @@ export default function App() {
             </button>
             <div>
               <div className="breadcrumb">
-                Workspace <ChevronRight size={12} /> {title}
+                Estoque Pro <ChevronRight size={12} /> {title}
               </div>
               <h1>{title}</h1>
             </div>
@@ -727,12 +733,8 @@ export default function App() {
               </Suspense>
             </div>
           </fieldset>
-
-          <footer className="page-footer">
-            <span>EstoquePro · Controle de inventário</span>
-            <span>Organização em cada movimentação.</span>
-          </footer>
         </div>
+        <AppFooter />
       </main>
 
       <Feedback />

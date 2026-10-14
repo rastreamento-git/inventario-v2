@@ -24,7 +24,11 @@ import {
 } from "../lib/scanner";
 import { createDecoder } from "../lib/scanner-client";
 
-export default function LeitorSeriais({ seriais, setSeriais }) {
+export default function LeitorSeriais({
+  seriais,
+  setSeriais,
+  initialCamera = false,
+}) {
   const [mode, setMode] = useState("auto");
   const [hidden, setHidden] = useState(() => document.hidden);
   const [hint, setHint] = useState("");
@@ -38,7 +42,7 @@ export default function LeitorSeriais({ seriais, setSeriais }) {
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const [manual, setManual] = useState("");
-  const [camera, setCamera] = useState(false);
+  const [camera, setCamera] = useState(initialCamera);
   const [paused, setPaused] = useState(false);
   const [device, setDevice] = useState("");
   const [devices, setDevices] = useState([]);

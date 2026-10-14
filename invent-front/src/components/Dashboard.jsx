@@ -150,8 +150,8 @@ export default function Dashboard({
                     x2="0"
                     y2="1"
                   >
-                    <stop offset="0%" stopColor="#14b8a6" />
-                    <stop offset="100%" stopColor="#0f766e" />
+                    <stop offset="0%" stopColor="#2563eb" />
+                    <stop offset="100%" stopColor="#1d4ed8" />
                   </linearGradient>
                 </defs>
 
@@ -174,12 +174,15 @@ export default function Dashboard({
                   tick={{ fill: "#64748b", fontSize: 12 }}
                 />
                 <Tooltip
-                  cursor={{ fill: "#f0fdfa", radius: 8 }}
+                  cursor={{ fill: "var(--ep-primary-soft)", radius: 8 }}
                   contentStyle={{
                     borderRadius: 12,
-                    border: "1px solid #e2e8f0",
+                    background: "var(--ep-surface)",
+                    color: "var(--ep-text)",
+                    border: "1px solid var(--ep-line)",
                     boxShadow: "0 8px 24px #0f172a0d",
                   }}
+                  labelStyle={{ color: "var(--ep-text)" }}
                   formatter={(value) => [number(value), "Instalações"]}
                 />
                 <Bar
