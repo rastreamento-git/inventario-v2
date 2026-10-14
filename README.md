@@ -1,138 +1,48 @@
-# Invent Back — Estoque Pro
+# Inventário v2 — Estoque Pro 1.3
 
-API Express/PostgreSQL para usar com `rastreamento-git/invent-front` da mesma entrega.
-Node.js 24 recomendado (mínimo 22.12). Banco PostgreSQL 16 ou superior recomendado.
+Projeto com frontend React/Vite e API Express/PostgreSQL. Os arquivos de aplicação ficam exclusivamente em `invent-front/` e `invent-back/`.
 
-## Instalação local
+## Nesta atualização
 
-```bash
-npm ci
-```
+- Rastreabilidade global separada da triagem: lista equipamentos atuais, arquivados e cancelados com histórico registrado.
+- Busca por IMEI/serial, modelo, tipo, técnico e operador; filtros e paginação no servidor.
+- Histórico individual com horário, situação, técnico e usuário responsável pelas novas movimentações.
+- Interface adaptada ao celular, atalhos de busca, detalhes em diálogo, feedback de operações e confirmações dentro do aplicativo.
+- Contas individuais com perfis Administrador e Operador, cadastro, ativação/desativação e troca de senha.
+- Backup local do inventário em JSON e restauração transacional.
+- Reset com confirmação, senha de administrador e backup do estado atual. Um inventário alterado depois do backup exige novo download.
+- Leitor de QR e códigos de barras da revisão anterior preservado, com WASM local e processamento em Web Worker.
 
-Copie `.env.example` para `.env` e ajuste `DATABASE_URL`.
-Para PostgreSQL local use `DATABASE_SSL=disable`. Para nuvem prefira `verify-full`
-e forneça `DATABASE_CA` se o provedor usa uma CA própria. `require` é uma opção
-explícita de compatibilidade com TLS sem verificar o certificado; não é o padrão.
+## Aplicar ao repositório e publicar
 
-```bash
-npm run migrate
-npm run reconcile
-npm start
-```
+Siga [LEIA-ME.md](LEIA-ME.md). É necessário atualizar as duas pastas e publicar o backend antes do frontend. A migração desta atualização cria contas, auditoria administrativa e a coluna de operador; ela não limpa o inventário.
 
-A API escuta na porta 3000 por padrão. `/healthz` verifica a conexão com o banco.
-Em um banco novo não há produtos nem técnicos: cadastre-os pela interface.
+Documentação específica: [backend](invent-back/README.md), [frontend](invent-front/README.md) e [leitor](invent-front/SCANNER_RAPIDO.md).
 
-## Atualização de banco existente
+## Atalhos administrativos
 
-Faça backup e teste numa cópia antes de atualizar a produção. Não havia um DDL
-versionado no repositório original; a migração preserva as tabelas existentes e
-assume as colunas já utilizadas pela API anterior. Ela adiciona `arquivado`,
-a tabela `eventos_seriais`, índices e controle de migrações. Não apaga o estoque
-nem altera automaticamente os saldos antigos.
+Entre como administrador e digite ou cole no campo de busca do cabeçalho:
 
-1. Pare a API antiga para evitar gravações enquanto atualiza/reconcilia o banco.
-2. Execute `npm run migrate`.
-3. Execute `npm run reconcile` para conferir diferenças entre saldos e seriais.
-4. Se todos os equipamentos físicos estiverem cadastrados por serial, execute
-   `npm run reconcile -- --apply` para recalcular os saldos. Se havia estoque
-   apenas em quantidade, cadastre/valide os seriais faltantes antes de aplicar.
-5. Inicie esta API e publique o frontend revisado em conjunto.
-
-A reconciliação usa os seriais como fonte do saldo. Dados com modelo, técnico ou
-status inválido exigem correção manual. Os registros legados de movimentação
-continuam disponíveis, mas não contêm a lista de IMEIs; somente as novas operações
-gravadas nesta versão possuem histórico individual por serial. IMEIs excluídos
-pela limpeza antiga não podem ser recuperados a partir destes repositórios.
-
-## Produção e Render
-
-Build: `npm ci`. Start: `npm run migrate && npm start`. Health check: `/healthz`.
-Defina no ambiente do serviço:
-
-| Variável | Uso |
+| Código | Ação |
 | --- | --- |
-| NODE_ENV | `production` |
-| DATABASE_URL | URL privada do PostgreSQL |
-| DATABASE_SSL | `verify-full`; `disable` somente em conexão local/interna sem TLS |
-| DATABASE_CA | Certificado CA do provedor, se necessário, com `\n` entre linhas |
-| CORS_ORIGINS | Domínios exatos do frontend, separados por vírgula, sem `/` final |
-| APP_PASSWORD | Senha de acesso com no mínimo 12 caracteres |
-| SESSION_SECRET | Segredo aleatório com no mínimo 32 caracteres |
-| TRUST_PROXY | `1` somente quando houver um proxy confiável na frente da API |
-| PORT | Normalmente fornecida automaticamente pela hospedagem |
+| `thereisnourflevel` | Abre o diálogo de reset |
+| `zenpoweradd` | Abre o cadastro e gerenciamento de usuários |
 
-Gere o segredo com `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`.
-Configure os segredos no painel da hospedagem, nunca no GitHub nem no frontend.
-O container do backend exige o banco já migrado; o Compose da entrega executa a
-migração antes de `npm start`.
+O painel também reconhece a sequência digitada fora de campos de formulário no computador. O código apenas abre o painel: autorização é conferida no servidor pelo perfil da conta.
 
-## Contrato e regras
+O ícone de download do cabeçalho abre os backups. O reset pode limpar todo o inventário ou somente os seriais, saldos e movimentações, mantendo modelos e técnicos. Em ambos os casos preserva contas e auditoria administrativa.
 
-As rotas anteriores permanecem, com as seguintes correções:
+## Dados antigos e backups
 
-- `entrada`, `transferir`, `instalar`, `estorno` e `triagem/receber` aceitam de 1 a
-  1.000 seriais em texto. Preservam zeros iniciais, validam o lote inteiro e
-  devolvem 400/404/409 para dados inválidos, ausentes ou em conflito.
-- Um serial já cadastrado faz a entrada inteira falhar com 409. Não há entrada
-  parcial nem aumento do saldo por duplicados. Atualize a lista antes de repetir
-  uma operação após timeout.
-- Todas as gravações de estoque usam uma única conexão de transação e um lock
-  transacional compartilhado entre instâncias. As gravações são serializadas,
-  adequado ao volume de um inventário administrativo; reavaliar para alta carga.
-- Transferência/baixa/devolução conferem modelo, técnico e estado de cada serial.
-  A devolução do técnico só aceita `TECNICO`. Instalados retornam por triagem.
-- Receber em triagem desconta o saldo de origem. Aprovar/reprovar exige estado
-  `TRIAGEM`; repetir a avaliação não aumenta o estoque novamente.
-- `GET /api/imeis` inclui `produto_id` e `tecnico_id`; comparação por nomes não é
-  necessária. `?incluir_arquivados=true` inclui os instalados arquivados.
-- `GET /api/imeis/:codigo/historico` consulta o histórico individual.
-- `DELETE /api/limpeza-instalados` **arquiva**, não exclui, instalados com mais de
-  30 dias. Resposta: `arquivados`, `apagados: 0`. A identidade permanece única.
-- Correção de entrada na matriz remove o serial, mas conserva a auditoria do
-  cancelamento. Modelos com equipamentos ou histórico não podem ser excluídos.
-- `PUT /api/configurar-alerta` também aceita `tipo: CATEGORIA`, para atualizar todos
-  os modelos da categoria numa única transação. Limite zero é válido.
-- O dashboard usa o fuso America/Sao_Paulo nas conexões e inclui os sete dias,
-  inclusive sem instalações. O desempenho da equipe representa os últimos 30 dias.
-- Compras mantêm a fórmula de consumo médio: ponto de pedido = 22,5 dias de
-  consumo e meta = 52,5 dias, respeitando o mínimo cadastrado. Valores são inteiros.
+A listagem inclui os seriais presentes no cadastro e identidades encontradas no histórico individual. Dados apagados pela versão antiga sem histórico não podem ser reconstruídos automaticamente. Movimentações antigas podem não ter operador identificado.
 
-## Acesso
+O JSON exporta modelos, técnicos, seriais, saldos, movimentações e eventos individuais. Não exporta contas, hashes de senha, segredos do ambiente nem auditoria administrativa. Para um backup completo de infraestrutura e autenticação, mantenha também o backup PostgreSQL do provedor.
 
-`POST /api/auth/login` recebe `{ "password": "..." }` e devolve um token de sessão
-assinado, válido por oito horas. Envie `Authorization: Bearer TOKEN` nas consultas
-e gravações. `GET /api/auth/session` informa se a sessão está autenticada.
-Há limite de tentativas de login. Em produção a API se recusa a iniciar sem
-configuração de acesso. Em desenvolvimento, sem APP_PASSWORD, o acesso é livre.
+A restauração valida formato, integridade e relações no banco antes de concluir a transação. Ela substitui o inventário atual e preserva os acessos. O aplicativo limita a seleção de backup a 25 MB.
 
-É acesso administrativo por senha compartilhada, não um sistema de contas ou RBAC.
-Trocar SESSION_SECRET invalida todos os tokens; trocar só APP_PASSWORD não revoga
-as sessões existentes. A limitação de login usa memória por instância; para muitas
-instâncias, adote um armazenamento compartilhado e autenticação individual.
+## Verificação
 
-## Testes
+Frontend: `npm test`, `npm run lint`, `npm run format:check`, `npm run build`.
+Backend: `npm test`, `npm run check`.
 
-```bash
-npm run check
-npm test
-npm audit --omit=dev
-```
-
-Por padrão os testes usam PGlite, que executa SQL PostgreSQL em WASM, sem depender
-do banco de produção. Para testar conexões concorrentes de verdade use um banco
-**exclusivo de teste**:
-
-```bash
-TEST_DATABASE_URL=postgresql://... npm test
-```
-
-Esse modo cria e remove esquemas temporários, nunca deve apontar para produção.
-O workflow de GitHub Actions incluído usa PostgreSQL 16 real. O teste local com
-PGlite possui uma conexão e enfileira acessos; não reproduz a concorrência de
-várias conexões. A entrega foi validada localmente com PGlite e navegador; não
-houve acesso ao banco ou à hospedagem do projeto em produção.
-
-## Reclassificação
-
-PUT /api/imeis/:codigo recebe { "produto_id": ID }. Valida serial/modelo, conserva técnico e status, recalcula os saldos dos dois modelos e registra RECLASSIFICACAO_ORIGEM e RECLASSIFICACAO_DESTINO. Repetir o mesmo destino não cria novo evento. Não há nova migração para esta rota.
+Testes de banco locais usam PGlite (PostgreSQL em WASM). Para testar múltiplas conexões, configure `TEST_DATABASE_URL` com um PostgreSQL exclusivo para testes. Nunca use produção nessa variável. O navegador também foi validado com o build de produção e um banco temporário, incluindo download, reset e restauração.
