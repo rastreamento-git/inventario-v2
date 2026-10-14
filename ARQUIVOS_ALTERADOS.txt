@@ -1,0 +1,31 @@
+Base: 1c615ded9a07ac45fb24554677ef9dff8ca46165
+M = arquivo existente modificado; ?? = arquivo ou pasta novo(a).
+
+ M invent-back/README.md
+ M invent-back/src/app.js
+ M invent-back/test/api.test.js
+ M invent-front/Dockerfile
+ M invent-front/README.md
+ M invent-front/package-lock.json
+ M invent-front/package.json
+ M invent-front/src/App.jsx
+ M invent-front/src/components/Dashboard.jsx
+ M invent-front/src/components/LeitorSeriais.jsx
+ M invent-front/src/components/screens.jsx
+ M invent-front/src/index.css
+ M invent-front/src/lib/api.js
+ M invent-front/src/lib/scanner.js
+ M invent-front/vite.config.js
+?? .gitignore
+?? ARQUIVOS_ALTERADOS.txt
+?? README.md
+?? REVISAO.md
+?? invent-back/.env.example
+?? invent-front/.env.example
+?? invent-front/scripts/
+?? invent-front/src/lib/api-url.js
+?? invent-front/src/lib/scanner-client.js
+?? invent-front/src/lib/scanner.worker.js
+?? invent-front/test/fixtures/
+?? invent-front/test/scanner.test.js
+?? invent-front/vercel.json
