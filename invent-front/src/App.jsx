@@ -28,6 +28,8 @@ import {
   Wrench,
   X,
   AlertTriangle,
+  ShieldCheck,
+  Download,
 } from "lucide-react";
 import { api, errorMessage, saveToken } from "./lib/api";
 import {
@@ -35,7 +37,7 @@ import {
   TelaTransferencia,
   TelaInstalacao,
   TelaEstorno,
-  TelaRastreioTriagem,
+  TelaTriagem,
   TelaEquipamentos,
   TelaCompras,
   TelaTecnicos,
@@ -43,6 +45,12 @@ import {
   TelaConfiguracao,
 } from "./components/screens";
 
+import { useSession } from "./lib/session";
+import { notify } from "./lib/feedback";
+import { commandFor, keySequence } from "./lib/easter-eggs";
+import Feedback from "./components/Feedback";
+const Traceability = lazy(() => import("./components/Traceability"));
+const AdminTools = lazy(() => import("./components/AdminTools"));
 const Dashboard = lazy(() => import("./components/Dashboard"));
 
 const groups = [
@@ -57,7 +65,8 @@ const groups = [
       ["transferencia", "Carga para técnico", Truck],
       ["instalacao", "Instalações", Wrench],
       ["estorno", "Devoluções e estornos", Undo2],
-      ["rastreio", "IMEIs e triagem", Search],
+      ["rastreio", "Rastreabilidade global", Search],
+      ["triagem", "Triagem e reuso", ShieldCheck],
     ],
   },
   {
@@ -86,6 +95,63 @@ function remember(enabled) {
 }
 
 export default function App() {
+  const user = useSession();
+  const initials = (user?.nome || "EP")
+    .split(/\s+/)
+    .map((s) => s[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [traceSearch, setTraceSearch] = useState("");
+  const [adminPanel, setAdminPanel] = useState(null);
+  function openAdmin(panel) {
+    if (user?.papel !== "admin") {
+      notify("Esta ação exige um administrador.", "error");
+      return;
+    }
+    setAdminPanel(panel);
+  }
+  function changeGlobalSearch(e) {
+    const value = e.target.value,
+      action = commandFor(value);
+    if (action) {
+      openAdmin(action);
+      setGlobalSearch("");
+    } else setGlobalSearch(value);
+  }
+  function searchSubmit(e) {
+    e.preventDefault();
+    const action = commandFor(globalSearch);
+    if (action) {
+      openAdmin(action);
+      setGlobalSearch("");
+    } else {
+      setTraceSearch(globalSearch.trim());
+      setTab("rastreio");
+      setMenu(false);
+    }
+  }
+  useEffect(() => {
+    const sequence = keySequence();
+    const handler = (event) => {
+      if (
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.isComposing ||
+        event.target.closest?.("input,textarea,select,[contenteditable='true']")
+      )
+        return;
+      const action = sequence(event.key, Date.now());
+      if (action) {
+        event.preventDefault();
+        openAdmin(action);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [user?.papel]);
   const [tab, setTab] = useState("dashboard");
   const [menu, setMenu] = useState(false);
   const [data, setData] = useState({
@@ -112,6 +178,10 @@ export default function App() {
   });
 
   const requestId = useRef(0);
+  const contentRef = useRef(null);
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [tab]);
   const notified = useRef(new Set());
   const title = groups
     .flatMap((group) => group.items)
@@ -394,10 +464,12 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <span className="avatar">EP</span>
+          <span className="avatar">{initials}</span>
           <div>
-            <strong>Painel administrativo</strong>
-            <small>Gestão de equipamentos</small>
+            <strong>{user?.nome || "Painel administrativo"}</strong>
+            <small>
+              {user?.papel === "admin" ? "Administrador" : "Operador"}
+            </small>
           </div>
           <button
             className="icon-button"
@@ -406,7 +478,11 @@ export default function App() {
             disabled={busy}
             onClick={() => {
               saveToken(null);
-              window.dispatchEvent(new Event("invent:unauthorized"));
+              window.dispatchEvent(
+                new CustomEvent("invent:unauthorized", {
+                  detail: { reason: "logout" },
+                }),
+              );
             }}
           >
             <LogOut size={18} />
@@ -434,6 +510,21 @@ export default function App() {
             </div>
           </div>
 
+          <form className="topbar-search" onSubmit={searchSubmit} role="search">
+            <Search size={17} />
+            <input
+              type="search"
+              aria-label="Pesquisar equipamento ou digitar atalho"
+              placeholder="Pesquisar equipamento…"
+              value={globalSearch}
+              onChange={changeGlobalSearch}
+              autoComplete="off"
+              maxLength={128}
+            />
+            <button type="submit" aria-label="Executar pesquisa ou atalho">
+              <ChevronRight size={18} />
+            </button>
+          </form>
           <div className="topbar-actions">
             <span className="header-date">
               {new Date().toLocaleDateString("pt-BR", {
@@ -458,11 +549,25 @@ export default function App() {
               {notificationsOn && <span className="notification-dot" />}
             </button>
 
-            <span className="avatar header-avatar">EP</span>
+            {user?.papel === "admin" && (
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Backups locais"
+                title="Backups locais"
+                disabled={busy}
+                onClick={() => openAdmin("backup")}
+              >
+                <Download size={19} />
+              </button>
+            )}
+            <span className="avatar header-avatar" title={user?.nome}>
+              {initials}
+            </span>
           </div>
         </header>
 
-        <div className="app-content">
+        <div className="app-content" ref={contentRef}>
           <div className="sync-toolbar">
             <span
               role="status"
@@ -585,11 +690,15 @@ export default function App() {
                   />
                 )}
                 {tab === "rastreio" && (
-                  <TelaRastreioTriagem
-                    imeisGlobais={data.imeis}
+                  <Traceability
                     produtos={data.produtos}
+                    refreshToken={updated}
+                    initialSearch={traceSearch}
                     reload={reload}
                   />
+                )}
+                {tab === "triagem" && (
+                  <TelaTriagem imeisGlobais={data.imeis} reload={reload} />
                 )}
                 {tab === "equipamentos" && (
                   <TelaEquipamentos produtos={data.produtos} reload={reload} />
@@ -626,6 +735,24 @@ export default function App() {
         </div>
       </main>
 
+      <Feedback />
+      {adminPanel && (
+        <Suspense
+          fallback={<div className="loading-card">Carregando painel…</div>}
+        >
+          <AdminTools
+            key={adminPanel}
+            panel={adminPanel}
+            onClose={() => setAdminPanel(null)}
+            onReset={async () => {
+              setTab("dashboard");
+              setTraceSearch("");
+              setGlobalSearch("");
+              await reload();
+            }}
+          />
+        </Suspense>
+      )}
       {notice && (
         <div className="ui-toast" role="status">
           <Bell size={18} />

@@ -1,7 +1,7 @@
 # Invent Back — Estoque Pro
 
 API Express/PostgreSQL para usar com `rastreamento-git/invent-front` da mesma entrega.
-Node.js 24 recomendado (mínimo 22.12). Banco PostgreSQL 16 ou superior recomendado.
+Node.js 24.x. Banco PostgreSQL 16 ou superior recomendado.
 
 ## Instalação local
 
@@ -57,15 +57,15 @@ Defina no ambiente do serviço:
 | DATABASE_SSL | `verify-full`; `disable` somente em conexão local/interna sem TLS |
 | DATABASE_CA | Certificado CA do provedor, se necessário, com `\n` entre linhas |
 | CORS_ORIGINS | Domínios exatos do frontend, separados por vírgula, sem `/` final |
-| APP_PASSWORD | Senha de acesso com no mínimo 12 caracteres |
+| APP_PASSWORD | Senha para inicializar o primeiro administrador; mínimo 12 caracteres |
 | SESSION_SECRET | Segredo aleatório com no mínimo 32 caracteres |
 | TRUST_PROXY | `1` somente quando houver um proxy confiável na frente da API |
 | PORT | Normalmente fornecida automaticamente pela hospedagem |
 
 Gere o segredo com `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`.
 Configure os segredos no painel da hospedagem, nunca no GitHub nem no frontend.
-O container do backend exige o banco já migrado; o Compose da entrega executa a
-migração antes de `npm start`.
+O container do backend exige o banco já migrado. No Render, use o Start Command
+acima para aplicar migrações antes de iniciar.
 
 ## Contrato e regras
 
@@ -98,18 +98,27 @@ As rotas anteriores permanecem, com as seguintes correções:
 - Compras mantêm a fórmula de consumo médio: ponto de pedido = 22,5 dias de
   consumo e meta = 52,5 dias, respeitando o mínimo cadastrado. Valores são inteiros.
 
-## Acesso
+## Acesso e contas
 
-`POST /api/auth/login` recebe `{ "password": "..." }` e devolve um token de sessão
-assinado, válido por oito horas. Envie `Authorization: Bearer TOKEN` nas consultas
-e gravações. `GET /api/auth/session` informa se a sessão está autenticada.
-Há limite de tentativas de login. Em produção a API se recusa a iniciar sem
-configuração de acesso. Em desenvolvimento, sem APP_PASSWORD, o acesso é livre.
+`POST /api/auth/login` recebe `{ "login": "admin", "password": "..." }` e devolve um token de sessão assinado, válido por oito horas, junto com o perfil público do usuário. Envie `Authorization: Bearer TOKEN`. `GET /api/auth/session` informa o usuário autenticado.
 
-É acesso administrativo por senha compartilhada, não um sistema de contas ou RBAC.
-Trocar SESSION_SECRET invalida todos os tokens; trocar só APP_PASSWORD não revoga
-as sessões existentes. A limitação de login usa memória por instância; para muitas
-instâncias, adote um armazenamento compartilhado e autenticação individual.
+A migração `002_users_admin.sql` cria `usuarios`, `auditoria_admin` e a coluna `operador` nas movimentações. Na primeira inicialização, sem contas, o login padrão `admin` é criado com a senha de `APP_PASSWORD`. `APP_ADMIN_USER` permite outro login inicial. APP_PASSWORD não sobrescreve senhas de contas existentes. Senhas usam scrypt, sal aleatório por conta e comparação em tempo constante.
+
+Perfis: `operador` consulta e movimenta o inventário; `admin` também acessa `/api/admin/*`. Troca de senha, alteração de perfil e desativação aumentam a versão de sessão da conta e invalidam os seus tokens anteriores. Trocar SESSION_SECRET invalida todos os tokens.
+
+Há limite de tentativas de login. Em produção são exigidos APP_PASSWORD de pelo menos 12 caracteres e SESSION_SECRET de pelo menos 32. Em desenvolvimento sem APP_PASSWORD, acesso é livre; reset e restauração exigem autenticação configurada. A limitação de login é mantida em memória por instância.
+
+## Rastreabilidade e administração
+
+- `GET /api/rastreabilidade`: todos os seriais presentes no cadastro ou no histórico individual. Parâmetros: `q`, `status`, `categoria`, `tecnico_id`, `arquivo` (`todos`, `ativos`, `arquivados`), `page` e `pageSize` (até 100). Retorna linhas, totais, páginas e filtros disponíveis.
+- `GET/POST /api/admin/users`: listar/cadastrar contas. Criação recebe nome, login, password e papel. A API não expõe senha_hash.
+- `PUT /api/admin/users/:id`: ativar/desativar, alterar perfil ou definir `nova_senha`; preserva ao menos um administrador e impede retirar o próprio acesso administrativo.
+- `GET /api/admin/backup`: exporta as seis tabelas de inventário, contagens e SHA-256 do conteúdo. Exclui contas, hashes, segredos e auditoria administrativa.
+- `POST /api/admin/reset`: exige perfil admin, senha atual, `confirmation: "thereisnourflevel"`, `scope: "all"` ou `"stock"` e `expectedChecksum` do backup atual. Se os dados mudaram, responde 409. Preserva usuários, auditoria administrativa e migrações.
+- `POST /api/admin/restore`: exige perfil admin, senha atual, `confirmation: "restaurar"`, backup compatível e `expectedChecksum` do inventário antes da substituição. Valida integridade, colunas e restrições do banco. Restaura tabelas e sequências de IDs em uma transação; falhas causam rollback.
+- `GET /api/admin/audit`: últimas 100 operações administrativas, sem senhas.
+
+O checksum detecta alterações no conteúdo; não é uma assinatura criptográfica. Todas as gravações, o snapshot do backup, o reset e a restauração usam o mesmo lock transacional para evitar substituição de dados modificados depois da exportação. O JSON local não substitui o backup integral do PostgreSQL.
 
 ## Testes
 
@@ -128,7 +137,6 @@ TEST_DATABASE_URL=postgresql://... npm test
 ```
 
 Esse modo cria e remove esquemas temporários, nunca deve apontar para produção.
-O workflow de GitHub Actions incluído usa PostgreSQL 16 real. O teste local com
-PGlite possui uma conexão e enfileira acessos; não reproduz a concorrência de
+O teste local com PGlite possui uma conexão e enfileira acessos; não reproduz a concorrência de
 várias conexões. A entrega foi validada localmente com PGlite e navegador; não
 houve acesso ao banco ou à hospedagem do projeto em produção.

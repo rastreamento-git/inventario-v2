@@ -1,64 +1,43 @@
-# Invent Front — Estoque Pro
+# Invent Front — Estoque Pro 1.3
 
-Interface React/Vite para matriz, técnicos, IMEIs, instalações, triagem e compras.
-Use em conjunto com `rastreamento-git/invent-back` da mesma entrega.
+Interface React/Vite para matriz, técnicos, instalações, triagem, compras e rastreabilidade global. Use com `invent-back/` desta mesma entrega. Node.js 24.x.
 
 ## Local
 
-Node.js 24 recomendado (mínimo 22.12).
-
 ```bash
-npm ci
-```
-
-Copie `.env.example` para `.env`. Inicie o backend na porta 3000 e execute:
-
-```bash
+npm ci --include=dev
 npm run dev
 ```
 
-Acesse http://localhost:5173. O proxy do Vite encaminha `/api` para o backend.
-Se o backend tiver `APP_PASSWORD`, a interface solicita a senha. Em desenvolvimento,
-a API pode funcionar sem senha; em produção ela exige senha e segredo de sessão.
+O Vite escuta normalmente em http://localhost:5173 e encaminha `/api` para o backend em http://localhost:3000. `API_PROXY_TARGET` permite mudar esse destino no desenvolvimento. Veja `.env.example`.
 
-## Nuvem
+## Vercel
 
-Hospedagem estática: comando de build `npm ci --include=dev && npm run build`, diretório `dist`.
-Configure `VITE_API_URL=https://SEU-BACKEND/api` **antes do build** e inclua o domínio
-exato do frontend em `CORS_ORIGINS` no backend. Para preservar o serviço do projeto
-original, o endereço anteriormente usado era `https://estoque-api-7l82.onrender.com/api`;
-confirme que ele continua sendo o seu backend antes de usá-lo.
+Root Directory: `invent-front`. Install Command: `npm ci --include=dev`. Build Command: `npm run build`. Output Directory: `dist`. Node.js: `24.x`.
 
-Não coloque DATABASE_URL, APP_PASSWORD ou SESSION_SECRET em variáveis `VITE_*`.
-Após mudar VITE_API_URL, gere um novo build. Câmera: HTTPS ou localhost e permissão
-do navegador. O container fornecido usa `/api` com proxy para um serviço chamado
-`backend`; é destinado ao Compose que acompanha a entrega. Para hospedagem
-estática separada use `dist`, não esse proxy Nginx.
+Configure `VITE_API_URL=https://SEU-BACKEND/api` antes do build e inclua a origem exata do frontend em `CORS_ORIGINS` do backend. O arquivo `vercel.json` fixa os comandos de instalação e build. Nunca coloque variáveis de banco, senhas ou segredos em `VITE_*`.
+
+## Interface e acesso
+
+O login aceita usuário e senha. A sessão fica em sessionStorage e dura até oito horas. O administrador inicial usa `admin` e a senha de APP_PASSWORD; as contas posteriores são armazenadas no banco.
+
+A rastreabilidade global usa busca e paginação do servidor e inclui arquivados e cancelados com histórico. A triagem tem fluxo independente de recebimento e avaliação. Confirmações usam diálogos, com ações identificadas e mensagens de erro na interface.
+
+O cabeçalho permite pesquisar equipamentos e reconhecer os atalhos administrativos `thereisnourflevel` (reset) e `zenpoweradd` (usuários). Os painéis dependem do perfil de administrador e de autorização no backend. O botão de download abre backup e restauração locais.
+
+## Scanner
+
+O leitor usa zxing-wasm 3.1.5 em Web Worker. O Vite publica o WASM no próprio domínio. Modos QR/Barras/Automático analisam o quadro inteiro, preferindo captura em 1080p quando disponível. Leituras são confirmadas em dois ou três quadros conforme o formato; fotos usam o mesmo motor. Veja `SCANNER_RAPIDO.md`.
+
+O leitor e os gráficos são carregados sob demanda. A câmera precisa de HTTPS ou localhost e de permissão do navegador. Publique todos os assets do build, incluindo o WASM e o worker.
 
 ## Qualidade
 
 ```bash
+npm test
 npm run lint
 npm run format:check
-npm test
 npm run build
 ```
 
-O scanner e os gráficos são carregados sob demanda. Há bloqueio durante gravações,
-mensagens de erro, atualização manual, comparação por IDs, deduplicação no TXT e
-limite de 1.000 seriais por lote. O botão de atualização preserva a seleção dos
-itens que continuam disponíveis. O histórico por IMEI passa a ser gravado pelo
-backend revisado; eventos anteriores não são reconstruídos artificialmente.
-
-As notificações do navegador são opcionais e ativadas por botão. Os alertas da
-interface funcionam mesmo sem suporte a Notification, e incluem estoque zerado.
-
-A sessão fica em sessionStorage, é enviada como Bearer e dura até oito horas.
-Sair remove o token deste navegador. A senha é compartilhada: esta versão não
-implementa usuários individuais, funções ou permissões por técnico.
-
-## Scanner desta revisão
-
-O leitor usa zxing-wasm 3.1.5 em Web Worker. O Vite publica o arquivo WASM no próprio domínio; não requer CDN ou API externa. Modos QR/Barras/Automático com imagem inteira, captura preferencial 1080p, autofocus opcional, confirmação em dois quadros para formatos com verificação interna e três para os demais, com descarte de ambiguidades. Fotos usam o mesmo motor. Veja SCANNER_RAPIDO.md para resultados, implantação e limites de hardware. Publique todos os assets do build.
-
-Na Vercel, selecione Root Directory invent-front, Install Command npm ci --include=dev, Build Command npm run build e Output Directory dist. O vercel.json desta pasta também fixa esses três comandos/campos. A instalação precisa incluir devDependencies, pois Vite e plugins são ferramentas de build.
+Os testes incluem tratamento de seriais, scanner, agrupamento de compras, URL de API e reconhecimento dos códigos. Os fluxos administrativos foram verificados no navegador com a API real e um banco temporário.

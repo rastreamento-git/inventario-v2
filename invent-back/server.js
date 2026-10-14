@@ -6,6 +6,7 @@ async function start() {
   let app;
   try {
     app = createApp(pool);
+    await app.locals.ready();
     await pool.query("SELECT arquivado FROM equipamentos_seriais LIMIT 0");
     await pool.query("SELECT id FROM eventos_seriais LIMIT 0");
   } catch (error) {

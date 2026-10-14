@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy } from "react";
 import { api, errorMessage } from "../lib/api";
+import { notify, confirmAction } from "../lib/feedback";
 import { mergeSerials } from "../lib/serials";
 import { groupForecast } from "../lib/forecast";
 import TipoEquipamento from "./TipoEquipamento";
@@ -139,7 +140,7 @@ function SidebarSelecaoImeis({
           : mergeSerials(seriais, [codigo]),
       );
     } catch (e) {
-      alert(e.message);
+      notify(e.message);
     }
   };
 
@@ -154,7 +155,7 @@ function SidebarSelecaoImeis({
     } else {
       const novos = new Set([...seriais, ...imeisFiltradosPesquisa]);
       if (novos.size > 1000)
-        return alert(
+        return notify(
           "Selecione no máximo 1.000 itens por operação. Use a pesquisa para reduzir o lote.",
         );
       setSeriais(Array.from(novos));
@@ -260,24 +261,26 @@ export function TelaEquipamentos({ produtos, reload }) {
         categoria,
         estoque_minimo: minSugerido,
       });
-      alert("Equipamento cadastrado com sucesso!");
+      notify("Equipamento cadastrado com sucesso!");
       setNome("");
       reload();
     } catch (err) {
-      alert(errorMessage(err));
+      notify(errorMessage(err), "error");
     }
   };
 
   const removerEquipamento = async (id, nomeEquip) => {
     if (
-      window.confirm(`Tem certeza que deseja remover o modelo ${nomeEquip}?`)
+      await confirmAction(
+        `Tem certeza que deseja remover o modelo ${nomeEquip}?`,
+      )
     ) {
       try {
         await api.delete(`/produtos/${id}`);
-        alert("Removido!");
+        notify("Removido!");
         reload();
       } catch (err) {
-        alert(errorMessage(err));
+        notify(errorMessage(err), "error");
       }
     }
   };
@@ -286,9 +289,9 @@ export function TelaEquipamentos({ produtos, reload }) {
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 1024 * 1024)
-      return alert("O arquivo TXT deve ter até 1 MB.");
+      return notify("O arquivo TXT deve ter até 1 MB.");
     const reader = new FileReader();
-    reader.onerror = () => alert("Não foi possível ler o arquivo.");
+    reader.onerror = () => notify("Não foi possível ler o arquivo.");
     reader.onload = async (event) => {
       const linhas = [
         ...new Set(
@@ -298,13 +301,13 @@ export function TelaEquipamentos({ produtos, reload }) {
             .filter(Boolean),
         ),
       ];
-      if (linhas.length === 0) return alert("Arquivo vazio.");
+      if (linhas.length === 0) return notify("Arquivo vazio.");
       if (linhas.length > 1000)
-        return alert("Importe no máximo 1.000 registros por arquivo.");
+        return notify("Importe no máximo 1.000 registros por arquivo.");
       if (
-        !window.confirm(
+        !(await confirmAction(
           `Deseja importar ${linhas.length} modelos como "${categoria}"?`,
-        )
+        ))
       )
         return;
 
@@ -324,7 +327,7 @@ export function TelaEquipamentos({ produtos, reload }) {
           /* Summary reports failed rows. */
         }
       }
-      alert(
+      notify(
         `${sucesso} modelos importados; ${linhas.length - sucesso} falharam ou já existiam.`,
       );
       reload();
@@ -461,12 +464,12 @@ export function TelaEntrada({ produtos, reload }) {
         produto_id: produtoId,
         seriais,
       });
-      alert(`${res.data.registrados} registrados!`);
+      notify(`${res.data.registrados} registrados!`);
       setSeriais([]);
       setProdutoId("");
       reload();
     } catch (err) {
-      alert(errorMessage(err));
+      notify(errorMessage(err), "error");
     }
   };
   return (
@@ -525,11 +528,11 @@ export function TelaTransferencia({
         produto_id: produtoId,
         seriais,
       });
-      alert("Transferência concluída!");
+      notify("Transferência concluída!");
       setSeriais([]);
       reload();
     } catch (err) {
-      alert(errorMessage(err));
+      notify(errorMessage(err), "error");
     }
   };
   return (
@@ -616,11 +619,11 @@ export function TelaInstalacao({
         produto_id: produtoId,
         seriais,
       });
-      alert("Instalação registrada!");
+      notify("Instalação registrada!");
       setSeriais([]);
       reload();
     } catch (err) {
-      alert(errorMessage(err));
+      notify(errorMessage(err), "error");
     }
   };
   return (
@@ -705,7 +708,7 @@ export function TelaEstorno({
   const [seriais, setSeriais] = useState([]);
   const submit = async (e) => {
     e.preventDefault();
-    if (confirm(`Estornar ${seriais.length} equipamento(s)?`)) {
+    if (await confirmAction(`Estornar ${seriais.length} equipamento(s)?`)) {
       try {
         await api.post("/estorno", {
           tipo_estorno: tipo,
@@ -713,11 +716,11 @@ export function TelaEstorno({
           tecnico_id: tecnicoId,
           seriais,
         });
-        alert("Estornado com sucesso.");
+        notify("Estornado com sucesso.");
         setSeriais([]);
         reload();
       } catch (err) {
-        alert(errorMessage(err));
+        notify(errorMessage(err), "error");
       }
     }
   };
@@ -821,430 +824,120 @@ export function TelaEstorno({
 // ==========================================
 // TELA RASTREIO (COM BUSCA GLOBAL)
 // ==========================================
-export function TelaRastreioTriagem({
-  imeisGlobais = [],
-  produtos = [],
-  reload,
-}) {
-  const [seriaisRecebidos, setSeriaisRecebidos] = useState([]);
-  const [filtroStatus, setFiltroStatus] = useState("TODOS");
-  const [filtroTipo, setFiltroTipo] = useState("TODOS");
-  const [busca, setBusca] = useState("");
-  const [historico, setHistorico] = useState(null);
-  const [archivedItems, setArchivedItems] = useState(null);
-
-  // Estado para o modal de reclassificação/mover
-  const [itemParaMover, setItemParaMover] = useState(null);
-  const [novoProdutoId, setNovoProdutoId] = useState("");
-  const [salvandoMudanca, setSalvandoMudanca] = useState(false);
-
-  async function loadArchived() {
-    try {
-      const { data } = await api.get("/imeis", {
-        params: { incluir_arquivados: true },
-      });
-      setArchivedItems(data);
-    } catch (err) {
-      alert(errorMessage(err));
-    }
-  }
-
-  async function showHistory(code) {
-    try {
-      const { data } = await api.get(
-        `/imeis/${encodeURIComponent(code)}/historico`,
-      );
-      setHistorico({ code, events: data });
-    } catch (err) {
-      alert(errorMessage(err));
-    }
-  }
-
-  useEffect(() => {
-    setArchivedItems(null);
-  }, [imeisGlobais]);
-
-  const enviarParaTriagem = async (e) => {
+export function TelaTriagem({ imeisGlobais = [], reload }) {
+  const [seriais, setSeriais] = useState([]);
+  const [processing, setProcessing] = useState(false);
+  const rows = imeisGlobais.filter((i) => i.status === "TRIAGEM");
+  async function receive(e) {
     e.preventDefault();
+    setProcessing(true);
     try {
-      await api.post("/triagem/receber", { seriais: seriaisRecebidos });
-      alert("Enviado para Triagem!");
-      setSeriaisRecebidos([]);
-      reload();
-    } catch (err) {
-      alert(errorMessage(err));
-    }
-  };
-
-  const limparAntigos = async () => {
-    if (
-      !window.confirm(
-        "Arquivar instalados há mais de 30 dias? Os seriais e o histórico serão preservados.",
-      )
-    )
-      return;
-    try {
-      const res = await api.delete("/limpeza-instalados");
-      alert(`${res.data.arquivados} arquivado(s).`);
+      await api.post("/triagem/receber", { seriais });
+      notify("Equipamentos recebidos para triagem.", "success");
+      setSeriais([]);
       await reload();
-    } catch (err) {
-      alert(errorMessage(err));
-    }
-  };
-
-  // Salvar a mudança de modelo/tipo do equipamento
-  const salvarReclassificacao = async (e) => {
-    e.preventDefault();
-    if (!novoProdutoId) {
-      alert("Selecione o novo modelo de equipamento.");
-      return;
-    }
-    setSalvandoMudanca(true);
-    try {
-      await api.put(
-        `/imeis/${encodeURIComponent(itemParaMover.codigo_serial)}`,
-        {
-          produto_id: Number(novoProdutoId),
-        },
-      );
-      alert(`Equipamento ${itemParaMover.codigo_serial} movido com sucesso!`);
-      setItemParaMover(null);
-      setNovoProdutoId("");
-      await reload();
-    } catch (err) {
-      alert(errorMessage(err));
+    } catch (e) {
+      notify(errorMessage(e), "error");
     } finally {
-      setSalvandoMudanca(false);
+      setProcessing(false);
     }
-  };
-
-  // Filtro Inteligente: avalia termo de busca em serial, produto, categoria e registros sem tipo
-  const termo = busca.trim().toLowerCase();
-  const baseItens = archivedItems || imeisGlobais;
-
-  const imeisFiltrados = baseItens.filter((i) => {
-    // 1. Filtro por status
-    if (filtroStatus !== "TODOS" && i.status !== filtroStatus) return false;
-
-    // 2. Filtro por tipo/categoria
-    const categoriaNormalizada = (
-      i.categoria ||
-      i.tipo ||
-      "SEM_TIPO"
-    ).toUpperCase();
-    if (filtroTipo === "SEM_TIPO" && categoriaNormalizada !== "SEM_TIPO")
-      return false;
+  }
+  async function evaluate(row, approved) {
     if (
-      filtroTipo !== "TODOS" &&
-      filtroTipo !== "SEM_TIPO" &&
-      categoriaNormalizada !== filtroTipo
+      !(await confirmAction(
+        `${approved ? "Aprovar para reuso" : "Enviar para sucata"} o equipamento ${row.codigo_serial}?`,
+        {
+          title: "Avaliar equipamento",
+          confirmLabel: approved ? "Aprovar para reuso" : "Enviar para sucata",
+          danger: !approved,
+        },
+      ))
     )
-      return false;
-
-    // 3. Busca por texto (abrange NT-40, modelo, serial e itens sem tipo)
-    if (!termo) return true;
-
-    const serialMatch = String(i.codigo_serial || "")
-      .toLowerCase()
-      .includes(termo);
-    const produtoMatch = String(i.produto || i.nome || "")
-      .toLowerCase()
-      .includes(termo);
-    const modeloMatch = String(i.modelo || "")
-      .toLowerCase()
-      .includes(termo);
-    const categoriaMatch = String(i.categoria || i.tipo || "sem tipo")
-      .toLowerCase()
-      .includes(termo);
-
-    return serialMatch || produtoMatch || modeloMatch || categoriaMatch;
-  });
-
+      return;
+    setProcessing(true);
+    try {
+      await api.post("/triagem/avaliar", {
+        codigo_serial: row.codigo_serial,
+        aprovado: approved,
+      });
+      notify(
+        approved
+          ? "Equipamento disponível para reuso na matriz."
+          : "Equipamento classificado como sucata.",
+        "success",
+      );
+      await reload();
+    } catch (e) {
+      notify(errorMessage(e), "error");
+    } finally {
+      setProcessing(false);
+    }
+  }
   return (
-    <div className="space-y-8">
-      {/* Modal para Mover / Corrigir Tipo e Modelo */}
-      {itemParaMover && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-gray-100">
-            <h3 className="text-lg font-bold text-gray-800 mb-2">
-              Mover / Corrigir Equipamento
-            </h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Altere o modelo e categoria associados ao serial{" "}
-              <strong className="font-mono text-teal-700">
-                {itemParaMover.codigo_serial}
-              </strong>
-              .
-            </p>
-
-            <form onSubmit={salvarReclassificacao} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Modelo Atual:
-                </label>
-                <div className="p-2.5 bg-gray-50 border rounded-lg text-sm text-gray-700">
-                  [{itemParaMover.categoria || "SEM TIPO"}]{" "}
-                  {itemParaMover.produto || "Não definido"}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Novo Modelo e Categoria de Destino:
-                </label>
-                <select
-                  required
-                  className="w-full p-2.5 border rounded-lg text-sm font-medium bg-white"
-                  value={novoProdutoId}
-                  onChange={(e) => setNovoProdutoId(e.target.value)}
-                >
-                  <option value="">Selecione o modelo correto…</option>
-                  {produtos.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      [{p.categoria || "RASTREADOR"}] {p.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  className="px-4 py-2 border rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50"
-                  onClick={() => setItemParaMover(null)}
-                  disabled={salvandoMudanca}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={salvandoMudanca || !novoProdutoId}
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition"
-                >
-                  {salvandoMudanca ? "Salvando…" : "Confirmar Alteração"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Histórico do serial */}
-      {historico && (
-        <section className="bg-white border rounded-xl p-6">
-          <div className="flex justify-between mb-4">
-            <h3 className="font-bold">Histórico: {historico.code}</h3>
-            <button
-              onClick={() => setHistorico(null)}
-              aria-label="Fechar histórico"
-            >
-              <X />
-            </button>
-          </div>
-          <ul className="space-y-2 text-sm">
-            {historico.events.map((e) => (
-              <li key={e.id}>
-                {new Date(e.data).toLocaleString("pt-BR")} — {e.tipo}:{" "}
-                {e.status_anterior || "NOVO"} → {e.status_novo}
-                {e.tecnico ? ` (${e.tecnico})` : ""}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Painel Superior de Triagem */}
-      <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <section className="triage-page">
+      <div className="page-intro">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center">
-            <ShieldCheck className="mr-2 text-orange-500" /> RMA / Triagem
-          </h2>
-          <p className="text-sm text-gray-500 mb-6">
-            Receba equipamentos defeituosos.
+          <span className="eyebrow">Recebimento e avaliação</span>
+          <h2>Triagem e reuso</h2>
+          <p>
+            Receba devoluções, avalie os equipamentos e devolva os aprovados à
+            matriz.
           </p>
-          <LeitorSeriais
-            seriais={seriaisRecebidos}
-            setSeriais={setSeriaisRecebidos}
-          />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-2xl border border-gray-100">
+          <h3 className="font-bold mb-4">Receber equipamentos</h3>
+          <LeitorSeriais seriais={seriais} setSeriais={setSeriais} />
         </div>
         <SidebarConferencia
-          seriais={seriaisRecebidos}
-          setSeriais={setSeriaisRecebidos}
-          submit={enviarParaTriagem}
-          disabled={seriaisRecebidos.length === 0}
-          labelBtn="Mandar para Triagem"
-          corBtn="bg-orange-500"
+          seriais={seriais}
+          setSeriais={setSeriais}
+          submit={receive}
+          disabled={processing || !seriais.length}
+          labelBtn="Receber para triagem"
+          corBtn="bg-orange-500 hover:bg-orange-600"
         />
       </div>
-
-      {/* Tabela de Rastreabilidade com Filtros Tolerantes */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-100 bg-slate-50 flex justify-between items-center flex-wrap gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-gray-800 flex items-center">
-              <Search className="mr-2" /> Rastreabilidade Global
-            </h2>
-            <p className="text-xs text-gray-500 mt-1">
-              Total de registros exibidos:{" "}
-              <strong>{imeisFiltrados.length}</strong>
-            </p>
+      <div className="trace-card triage-queue">
+        <h3>{rows.length} equipamento(s) aguardando avaliação</h3>
+        {!rows.length ? (
+          <div className="empty-state">
+            <ShieldCheck size={32} />
+            <p>Nenhum equipamento aguardando avaliação.</p>
           </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative w-64">
-              <Search
-                className="absolute left-3 top-2.5 text-gray-400"
-                size={16}
-              />
-              <input
-                type="text"
-                placeholder="Buscar NT-40, IMEI, Modelo..."
-                className="w-full pl-9 p-2 border border-gray-300 rounded-md text-sm outline-none bg-white"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
+        ) : (
+          rows.map((row) => (
+            <div className="triage-row" key={row.codigo_serial}>
+              <div>
+                <code>{row.codigo_serial}</code>
+                <small>
+                  {row.produto} · {row.categoria}
+                </small>
+              </div>
+              <div className="row-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={processing}
+                  onClick={() => evaluate(row, false)}
+                >
+                  Enviar para sucata
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={processing}
+                  onClick={() => evaluate(row, true)}
+                >
+                  Aprovar para reuso
+                </button>
+              </div>
             </div>
-
-            <select
-              className="p-2 border rounded-md font-bold text-sm bg-white"
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value)}
-            >
-              <option value="TODOS">Todos os Tipos</option>
-              <option value="RASTREADOR">Rastreadores</option>
-              <option value="TAG">Tags</option>
-              <option value="SEM_TIPO">Sem Tipo Definido</option>
-            </select>
-
-            <select
-              className="p-2 border rounded-md font-bold text-sm bg-white"
-              value={filtroStatus}
-              onChange={(e) => setFiltroStatus(e.target.value)}
-            >
-              <option value="TODOS">Todos os Status</option>
-              <option value="MATRIZ">Matriz</option>
-              <option value="TECNICO">Com Técnico</option>
-              <option value="INSTALADO">Instalados</option>
-              <option value="TRIAGEM">Na Triagem</option>
-              <option value="SUCATA">Sucata</option>
-            </select>
-
-            <button
-              onClick={() =>
-                archivedItems ? setArchivedItems(null) : loadArchived()
-              }
-              className="text-sm border px-3 py-2 rounded-md bg-white hover:bg-gray-50"
-            >
-              {archivedItems ? "Ocultar arquivados" : "Incluir arquivados"}
-            </button>
-            <button
-              onClick={limparAntigos}
-              className="text-sm bg-white border px-3 py-2 rounded-md hover:bg-gray-100"
-            >
-              Arquivar (+30 dias)
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto max-h-[500px]">
-          <table className="w-full text-left whitespace-nowrap">
-            <thead className="sticky top-0 bg-gray-100 shadow-sm">
-              <tr className="text-gray-600 text-sm">
-                <th className="p-4">IMEI / Serial</th>
-                <th className="p-4">Modelo e Tipo</th>
-                <th className="p-4">Status</th>
-                <th className="p-4">Atualização</th>
-                <th className="p-4 text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {imeisFiltrados.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="p-8 text-center text-gray-500 text-sm"
-                  >
-                    Nenhum equipamento encontrado para o filtro "
-                    {busca || filtroTipo}".
-                  </td>
-                </tr>
-              ) : (
-                imeisFiltrados.map((i) => (
-                  <tr
-                    key={i.codigo_serial}
-                    className="border-b text-sm hover:bg-gray-50"
-                  >
-                    <td className="p-4 font-mono font-bold text-blue-600">
-                      <button
-                        onClick={() => showHistory(i.codigo_serial)}
-                        className="underline"
-                        title="Ver histórico do serial"
-                      >
-                        {i.codigo_serial}
-                      </button>
-                      {i.arquivado && (
-                        <span className="ml-2 text-xs text-gray-500">
-                          Arquivado
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4 font-medium">
-                      <span
-                        className={`inline-block mr-2 px-1.5 py-0.5 rounded text-xs font-bold ${
-                          !i.categoria && !i.tipo
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {i.categoria || i.tipo || "SEM TIPO"}
-                      </span>
-                      {i.produto || (
-                        <span className="text-gray-400 italic">
-                          Modelo não definido
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-bold ${
-                          i.status === "MATRIZ"
-                            ? "bg-blue-100 text-blue-800"
-                            : i.status === "INSTALADO"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {i.status}
-                      </span>
-                    </td>
-                    <td className="p-4 text-xs text-gray-500">
-                      {i.atualizado_em
-                        ? new Date(i.atualizado_em).toLocaleDateString("pt-BR")
-                        : "—"}
-                    </td>
-                    <td className="p-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setItemParaMover(i);
-                          setNovoProdutoId(
-                            i.produto_id ? String(i.produto_id) : "",
-                          );
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition"
-                        title="Mover para outro modelo ou corrigir tipo"
-                      >
-                        Mover / Corrigir
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+          ))
+        )}
       </div>
-    </div>
+    </section>
   );
 }
 export function TelaCompras({ previsao, produtos }) {
@@ -1319,11 +1012,11 @@ export function TelaConfiguracao({ tecnicos, reload }) {
         id,
         novo_limite: Number(limite),
       });
-      alert("Regra de Alerta Salva!");
+      notify("Regra de Alerta Salva!");
       setLimite("");
       await reload();
     } catch (err) {
-      alert(errorMessage(err));
+      notify(errorMessage(err), "error");
     }
   };
   return (
@@ -1414,22 +1107,22 @@ export function TelaTecnicos({ tecnicos, estoque, reload }) {
     e.preventDefault();
     try {
       await api.post("/tecnicos", { nome });
-      alert("Cadastrado!");
+      notify("Cadastrado!");
       setNome("");
       await reload();
     } catch (err) {
-      alert(errorMessage(err));
+      notify(errorMessage(err), "error");
     }
   };
   const remover = async (id, nomeTec) => {
     if (estoque.some((et) => et.tecnico_id === id && et.quantidade > 0))
-      return alert(`Técnico possui itens.`);
-    if (window.confirm(`Remover ${nomeTec}?`)) {
+      return notify(`Técnico possui itens.`);
+    if (await confirmAction(`Remover ${nomeTec}?`)) {
       try {
         await api.delete(`/tecnicos/${id}`);
         await reload();
       } catch (err) {
-        alert(errorMessage(err));
+        notify(errorMessage(err), "error");
       }
     }
   };
@@ -1438,9 +1131,9 @@ export function TelaTecnicos({ tecnicos, estoque, reload }) {
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 1024 * 1024)
-      return alert("O arquivo TXT deve ter até 1 MB.");
+      return notify("O arquivo TXT deve ter até 1 MB.");
     const reader = new FileReader();
-    reader.onerror = () => alert("Não foi possível ler o arquivo.");
+    reader.onerror = () => notify("Não foi possível ler o arquivo.");
     reader.onload = async (event) => {
       const linhas = [
         ...new Set(
@@ -1450,10 +1143,11 @@ export function TelaTecnicos({ tecnicos, estoque, reload }) {
             .filter(Boolean),
         ),
       ];
-      if (linhas.length === 0) return alert("Arquivo vazio.");
+      if (linhas.length === 0) return notify("Arquivo vazio.");
       if (linhas.length > 1000)
-        return alert("Importe no máximo 1.000 registros por arquivo.");
-      if (!window.confirm(`Deseja importar ${linhas.length} técnicos?`)) return;
+        return notify("Importe no máximo 1.000 registros por arquivo.");
+      if (!(await confirmAction(`Deseja importar ${linhas.length} técnicos?`)))
+        return;
 
       let sucesso = 0;
       for (let linha of linhas) {
@@ -1464,7 +1158,7 @@ export function TelaTecnicos({ tecnicos, estoque, reload }) {
           /* Summary reports failed rows. */
         }
       }
-      alert(
+      notify(
         `${sucesso} técnicos importados; ${linhas.length - sucesso} falharam ou já existiam.`,
       );
       reload();

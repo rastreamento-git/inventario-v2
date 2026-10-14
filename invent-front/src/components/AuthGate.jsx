@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, saveToken } from "../lib/api";
+import { SessionContext } from "../lib/session";
 export default function AuthGate({ children }) {
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
+  const [user, setUser] = useState(null);
+  const [login, setLogin] = useState("admin");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   async function check() {
@@ -10,6 +13,7 @@ export default function AuthGate({ children }) {
     setError("");
     try {
       const { data } = await api.get("/auth/session");
+      setUser(data.user);
       setStatus(data.authenticated ? "ready" : "login");
     } catch (e) {
       setError(errorMessage(e));
@@ -18,20 +22,28 @@ export default function AuthGate({ children }) {
   }
   useEffect(() => {
     check();
-    const expired = () => {
+    const expired = (event) => {
       setStatus("login");
-      setError("Sua sessão expirou. Entre novamente.");
+      setUser(null);
+      setError(
+        event.detail?.reason === "logout"
+          ? ""
+          : event.detail?.reason === "password_change"
+            ? "Senha alterada. Entre novamente."
+            : "Sua sessão expirou. Entre novamente.",
+      );
     };
     window.addEventListener("invent:unauthorized", expired);
     return () => window.removeEventListener("invent:unauthorized", expired);
   }, []);
-  async function login(e) {
+  async function submitLogin(e) {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const { data } = await api.post("/auth/login", { password });
+      const { data } = await api.post("/auth/login", { login, password });
       saveToken(data.token);
+      setUser(data.user);
       setPassword("");
       setStatus("ready");
     } catch (e) {
@@ -40,7 +52,10 @@ export default function AuthGate({ children }) {
       setBusy(false);
     }
   }
-  if (status === "ready") return children;
+  if (status === "ready")
+    return (
+      <SessionContext.Provider value={user}>{children}</SessionContext.Provider>
+    );
   return (
     <main className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 w-full max-w-md">
@@ -62,10 +77,22 @@ export default function AuthGate({ children }) {
             </button>
           </>
         ) : (
-          <form onSubmit={login} className="space-y-4">
+          <form onSubmit={submitLogin} className="space-y-4">
             <p className="text-slate-600">
               Entre para consultar e movimentar equipamentos.
             </p>
+            <label className="block font-medium" htmlFor="login">
+              Usuário
+            </label>
+            <input
+              id="login"
+              name="username"
+              autoComplete="username"
+              required
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              className="w-full border rounded-lg p-3"
+            />
             <label className="block font-medium" htmlFor="password">
               Senha de acesso
             </label>

@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const { configureAuth } = require("./auth");
+const { configureAdmin } = require("./admin");
+const { configureTrace } = require("./trace");
+const context = require("./context");
 const { fail, integer, text, HttpError } = require("./errors");
 const { transaction } = require("./database");
 const {
@@ -41,6 +44,7 @@ function createApp(pool, env = process.env) {
       },
     }),
   );
+  app.use("/api/admin/restore", express.json({ limit: "32mb" }));
   app.use(express.json({ limit: "512kb" }));
   app.get("/healthz", async (req, res) => {
     try {
@@ -63,7 +67,13 @@ function createApp(pool, env = process.env) {
     }
     next();
   });
-  configureAuth(app, env);
+  const auth = configureAuth(app, env, pool);
+  app.locals.ready = auth.ready;
+  app.use("/api", (req, res, next) =>
+    context.run({ operador: req.user?.login }, next),
+  );
+  configureAdmin(app, pool, auth);
+  configureTrace(app, pool);
   const get = (route, sql) =>
     app.get(`/api/${route}`, async (req, res) =>
       res.json((await pool.query(sql)).rows),
@@ -77,7 +87,7 @@ function createApp(pool, env = process.env) {
   );
   get(
     "logs",
-    `SELECT m.id,m.tipo,m.produto_id,m.tecnico_id,p.nome AS produto,t.nome AS tecnico,m.quantidade,m.data
+    `SELECT m.id,m.tipo,m.produto_id,m.tecnico_id,p.nome AS produto,t.nome AS tecnico,m.quantidade,m.data,m.operador
     FROM movimentacoes m LEFT JOIN produtos p ON p.id=m.produto_id LEFT JOIN tecnicos t ON t.id=m.tecnico_id ORDER BY m.data DESC,m.id DESC LIMIT 200`,
   );
   app.get("/api/imeis", async (req, res) => {
@@ -98,7 +108,7 @@ function createApp(pool, env = process.env) {
     res.json(
       (
         await pool.query(
-          `SELECT e.*,m.tipo,p.nome AS produto,t.nome AS tecnico FROM eventos_seriais e
+          `SELECT e.*,m.tipo,m.operador,p.nome AS produto,t.nome AS tecnico FROM eventos_seriais e
       LEFT JOIN movimentacoes m ON m.id=e.movimentacao_id LEFT JOIN produtos p ON p.id=e.produto_id LEFT JOIN tecnicos t ON t.id=e.tecnico_id
       WHERE e.codigo_serial=$1 ORDER BY e.data DESC,e.id DESC`,
           [code],
@@ -136,17 +146,36 @@ function createApp(pool, env = process.env) {
     const targetId = integer(req.body.produto_id, "Modelo");
     const result = await transaction(pool, async (client) => {
       const { rows } = await client.query(
-        "SELECT * FROM equipamentos_seriais WHERE codigo_serial=$1 FOR UPDATE", [code],
+        "SELECT * FROM equipamentos_seriais WHERE codigo_serial=$1 FOR UPDATE",
+        [code],
       );
       if (!rows.length) fail(404, "Serial não encontrado.");
       const row = rows[0];
       await product(client, targetId);
-      if (row.produto_id === targetId) return { success: true, alterado: false };
+      if (row.produto_id === targetId)
+        return { success: true, alterado: false };
       await client.query(
-        "UPDATE equipamentos_seriais SET produto_id=$1,data_atualizacao=CURRENT_TIMESTAMP WHERE codigo_serial=$2", [targetId, code],
+        "UPDATE equipamentos_seriais SET produto_id=$1,data_atualizacao=CURRENT_TIMESTAMP WHERE codigo_serial=$2",
+        [targetId, code],
       );
-      await record(client, "RECLASSIFICACAO_ORIGEM", row.produto_id, row.tecnico_id, [code], row.status, row.status);
-      await record(client, "RECLASSIFICACAO_DESTINO", targetId, row.tecnico_id, [code], row.status, row.status);
+      await record(
+        client,
+        "RECLASSIFICACAO_ORIGEM",
+        row.produto_id,
+        row.tecnico_id,
+        [code],
+        row.status,
+        row.status,
+      );
+      await record(
+        client,
+        "RECLASSIFICACAO_DESTINO",
+        targetId,
+        row.tecnico_id,
+        [code],
+        row.status,
+        row.status,
+      );
       await syncStock(client, [row.produto_id, targetId]);
       return { success: true, alterado: true };
     });

@@ -1,5 +1,6 @@
 const { fail, integer, serials, text } = require("./errors");
 const { transaction } = require("./database");
+const context = require("./context");
 async function product(client, id) {
   const result = await client.query(
     "SELECT * FROM produtos WHERE id = $1 FOR UPDATE",
@@ -72,8 +73,8 @@ async function record(
   toStatus,
 ) {
   const result = await client.query(
-    "INSERT INTO movimentacoes (tipo, produto_id, tecnico_id, quantidade) VALUES ($1,$2,$3,$4) RETURNING id",
-    [type, productId, techId, codes.length],
+    "INSERT INTO movimentacoes (tipo, produto_id, tecnico_id, quantidade, operador) VALUES ($1,$2,$3,$4,$5) RETURNING id",
+    [type, productId, techId, codes.length, context.getStore()?.operador || null],
   );
   await client.query(
     `INSERT INTO eventos_seriais (movimentacao_id,codigo_serial,produto_id,tecnico_id,status_anterior,status_novo)
