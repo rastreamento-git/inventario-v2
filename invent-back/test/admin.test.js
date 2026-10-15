@@ -10,6 +10,7 @@ const env = {
   APP_PASSWORD: "inventory-test-password",
   SESSION_SECRET: "b".repeat(48),
   CORS_ORIGINS: "https://test.example",
+  ZENCONTROL_INTEGRATION_SECRET: "test-only-integration-secret-123456789012345",
 };
 async function request(route, body, method = "POST", token = adminToken) {
   const res = await fetch(base + "/api/" + route, {
@@ -363,5 +364,96 @@ test("full reset preserves users, backup restores rows and serial sequences, inv
       })
     ).status,
     400,
+  );
+});
+
+test("legacy inventory backups retain integrity and receive an empty integration ledger", async () => {
+  const { validateBackup } = require("../src/admin");
+  const source = (await get("admin/backup")).body;
+  delete source.data.zencontrol_installations;
+  source.checksum = digest(source.data);
+  const compatible = validateBackup(source);
+  assert.deepEqual(compatible.data.zencontrol_installations, []);
+  source.data.produtos.push({ id: 99 });
+  assert.throws(() => validateBackup(source), /integridade/);
+});
+test("installation receipts survive backup and restore with their request identity", async (t) => {
+  // A fresh app isolates the security limiter from other destructive-action tests.
+  const previousBase = base;
+  const isolated = createApp(pool, env).listen(0, "127.0.0.1");
+  await new Promise((r) => isolated.once("listening", r));
+  base = "http://127.0.0.1:" + isolated.address().port;
+  t.after(async () => {
+    base = previousBase;
+    await new Promise((r) => isolated.close(r));
+  });
+  const id = await product(),
+    code = "receipt-backup-001";
+  await enter(id, [code]);
+  const tid = (await request("tecnicos", { nome: "Técnico recibo" })).body
+    .tecnico.id;
+  assert.equal(
+    (
+      await request("transferir", {
+        produto_id: id,
+        tecnico_id: tid,
+        seriais: [code],
+      })
+    ).status,
+    200,
+  );
+  const payload = {
+    source_system: "backup-test",
+    order_id: "OS-BACKUP-TEST",
+    submission_id: "submission-backup-test",
+    technician_id: tid,
+    serials: [code],
+    operator: "Teste",
+  };
+  const install = async () => {
+    const r = await fetch(base + "/api/integrations/zencontrol/installations", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + env.ZENCONTROL_INTEGRATION_SECRET,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "stock:backup:test-001",
+      },
+      body: JSON.stringify(payload),
+    });
+    return { status: r.status, body: await r.json() };
+  };
+  const first = await install();
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  const source = (await get("admin/backup")).body;
+  assert.equal(source.data.zencontrol_installations.length, 1);
+  assert.equal(
+    (
+      await request("admin/reset", {
+        confirmation: "thereisnourflevel",
+        password: env.APP_PASSWORD,
+        expectedChecksum: source.checksum,
+        scope: "all",
+      })
+    ).status,
+    200,
+  );
+  const current = (await get("admin/backup")).body;
+  const restored = await request("admin/restore", {
+    confirmation: "restaurar",
+    password: env.APP_PASSWORD,
+    backup: source,
+    expectedChecksum: current.checksum,
+  });
+  assert.equal(restored.status, 200, JSON.stringify(restored.body));
+  const retry = await install();
+  assert.equal(retry.status, 200, JSON.stringify(retry.body));
+  assert.equal(retry.body.receipt_id, first.body.receipt_id);
+  assert.equal(
+    (
+      await pool.query(
+        "SELECT count(*)::integer n FROM movimentacoes WHERE tipo='USO_FINAL'",
+      )
+    ).rows[0].n,
+    1,
   );
 });

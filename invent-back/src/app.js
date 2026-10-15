@@ -4,6 +4,7 @@ const helmet = require("helmet");
 const { configureAuth } = require("./auth");
 const { configureAdmin } = require("./admin");
 const { configureTrace } = require("./trace");
+const { configureZenControl } = require("./zencontrol");
 const context = require("./context");
 const { fail, integer, text, HttpError } = require("./errors");
 const { transaction } = require("./database");
@@ -67,6 +68,7 @@ function createApp(pool, env = process.env) {
     }
     next();
   });
+  configureZenControl(app, pool, env);
   const auth = configureAuth(app, env, pool);
   app.locals.ready = auth.ready;
   app.use("/api", (req, res, next) =>
@@ -377,7 +379,12 @@ function createApp(pool, env = process.env) {
         req.path,
         error.code || error.name,
       );
-    res.status(status).json({ error: message });
+    res.status(status).json({
+      error: message,
+      ...(["40001", "40P01", "55P03", "57014"].includes(error.code)
+        ? { code: "STOCK_BUSY", retryable: true }
+        : {}),
+    });
   });
   return app;
 }
