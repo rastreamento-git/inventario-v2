@@ -74,7 +74,13 @@ async function record(
 ) {
   const result = await client.query(
     "INSERT INTO movimentacoes (tipo, produto_id, tecnico_id, quantidade, operador) VALUES ($1,$2,$3,$4,$5) RETURNING id",
-    [type, productId, techId, codes.length, context.getStore()?.operador || null],
+    [
+      type,
+      productId,
+      techId,
+      codes.length,
+      context.getStore()?.operador || null,
+    ],
   );
   await client.query(
     `INSERT INTO eventos_seriais (movimentacao_id,codigo_serial,produto_id,tecnico_id,status_anterior,status_novo)
@@ -82,7 +88,7 @@ async function record(
     [result.rows[0].id, codes, productId, techId, fromStatus, toStatus],
   );
 }
-async function move(pool, action, body) {
+async function moveWithin(client, action, body) {
   const codes = serials(body.seriais);
   const productId = integer(body.produto_id, "Modelo");
   let techId;
@@ -96,78 +102,81 @@ async function move(pool, action, body) {
     !["MATRIZ", "TECNICO"].includes(body.tipo_estorno)
   )
     fail(400, "Tipo de estorno inválido.");
-  return transaction(pool, async (client) => {
-    await product(client, productId);
-    if (techId) await technician(client, techId);
-    if (action === "entrada") {
-      const existing = await client.query(
-        "SELECT codigo_serial FROM equipamentos_seriais WHERE codigo_serial = ANY($1::text[])",
+
+  await product(client, productId);
+  if (techId) await technician(client, techId);
+  if (action === "entrada") {
+    const existing = await client.query(
+      "SELECT codigo_serial FROM equipamentos_seriais WHERE codigo_serial = ANY($1::text[])",
+      [codes],
+    );
+    if (existing.rowCount)
+      fail(
+        409,
+        "O lote contém seriais já cadastrados (incluindo arquivados). Nenhum item foi incluído.",
+      );
+    await client.query(
+      "INSERT INTO equipamentos_seriais (codigo_serial,produto_id,status) SELECT unnest($1::text[]),$2,'MATRIZ'",
+      [codes, productId],
+    );
+    await record(
+      client,
+      "ENTRADA_MATRIZ",
+      productId,
+      null,
+      codes,
+      null,
+      "MATRIZ",
+    );
+  } else {
+    const rows = await items(client, codes);
+    let from,
+      to,
+      type,
+      targetTech = null;
+    if (action === "transferir") {
+      from = "MATRIZ";
+      to = "TECNICO";
+      type = "CARGA_TECNICO";
+      targetTech = techId;
+    }
+    if (action === "instalar") {
+      from = "TECNICO";
+      to = "INSTALADO";
+      type = "USO_FINAL";
+      targetTech = techId;
+    }
+    if (action === "estorno") {
+      from = body.tipo_estorno;
+      to = from === "MATRIZ" ? "CANCELADO" : "MATRIZ";
+      type = from === "MATRIZ" ? "ESTORNO_MATRIZ" : "DEVOLUCAO_TECNICO";
+    }
+    verify(rows, productId, from, from === "TECNICO" ? techId : undefined);
+    if (to === "CANCELADO")
+      await client.query(
+        "DELETE FROM equipamentos_seriais WHERE codigo_serial = ANY($1::text[])",
         [codes],
       );
-      if (existing.rowCount)
-        fail(
-          409,
-          "O lote contém seriais já cadastrados (incluindo arquivados). Nenhum item foi incluído.",
-        );
+    else
       await client.query(
-        "INSERT INTO equipamentos_seriais (codigo_serial,produto_id,status) SELECT unnest($1::text[]),$2,'MATRIZ'",
-        [codes, productId],
+        "UPDATE equipamentos_seriais SET status=$1,tecnico_id=$2,data_atualizacao=CURRENT_TIMESTAMP,arquivado=false WHERE codigo_serial = ANY($3::text[])",
+        [to, targetTech, codes],
       );
-      await record(
-        client,
-        "ENTRADA_MATRIZ",
-        productId,
-        null,
-        codes,
-        null,
-        "MATRIZ",
-      );
-    } else {
-      const rows = await items(client, codes);
-      let from,
-        to,
-        type,
-        targetTech = null;
-      if (action === "transferir") {
-        from = "MATRIZ";
-        to = "TECNICO";
-        type = "CARGA_TECNICO";
-        targetTech = techId;
-      }
-      if (action === "instalar") {
-        from = "TECNICO";
-        to = "INSTALADO";
-        type = "USO_FINAL";
-        targetTech = techId;
-      }
-      if (action === "estorno") {
-        from = body.tipo_estorno;
-        to = from === "MATRIZ" ? "CANCELADO" : "MATRIZ";
-        type = from === "MATRIZ" ? "ESTORNO_MATRIZ" : "DEVOLUCAO_TECNICO";
-      }
-      verify(rows, productId, from, from === "TECNICO" ? techId : undefined);
-      if (to === "CANCELADO")
-        await client.query(
-          "DELETE FROM equipamentos_seriais WHERE codigo_serial = ANY($1::text[])",
-          [codes],
-        );
-      else
-        await client.query(
-          "UPDATE equipamentos_seriais SET status=$1,tecnico_id=$2,data_atualizacao=CURRENT_TIMESTAMP,arquivado=false WHERE codigo_serial = ANY($3::text[])",
-          [to, targetTech, codes],
-        );
-      await record(client, type, productId, techId || null, codes, from, to);
-    }
-    await syncStock(client, [productId]);
-    const field = {
-      entrada: "registrados",
-      transferir: "transferidos",
-      instalar: "instalados",
-      estorno: "estornados",
-    }[action];
-    return { success: true, [field]: codes.length };
-  });
+    await record(client, type, productId, techId || null, codes, from, to);
+  }
+  await syncStock(client, [productId]);
+  const field = {
+    entrada: "registrados",
+    transferir: "transferidos",
+    instalar: "instalados",
+    estorno: "estornados",
+  }[action];
+  return { success: true, [field]: codes.length };
 }
+async function move(pool, action, body) {
+  return transaction(pool, (client) => moveWithin(client, action, body));
+}
+
 async function receive(pool, body) {
   const codes = serials(body.seriais);
   return transaction(pool, async (client) => {
@@ -238,6 +247,7 @@ async function evaluate(pool, body) {
   });
 }
 module.exports = {
+  moveWithin,
   move,
   receive,
   evaluate,

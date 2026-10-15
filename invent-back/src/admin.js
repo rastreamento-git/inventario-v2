@@ -9,6 +9,7 @@ const tables = [
   "equipamentos_seriais",
   "movimentacoes",
   "eventos_seriais",
+  "zencontrol_installations",
 ];
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -63,9 +64,16 @@ function validateBackup(value) {
     typeof value.data !== "object"
   )
     fail(400, "Arquivo não é um backup compatível do inventário.");
+  const incomingTables = Object.keys(value.data).sort();
+  const legacyTables = tables
+    .filter((t) => t !== "zencontrol_installations")
+    .toSorted();
+  const legacy = incomingTables.join(",") === legacyTables.join(",");
   if (
-    Object.keys(value.data).sort().join(",") !== tables.toSorted().join(",") ||
-    tables.some(
+    (!legacy &&
+      Object.keys(value.data).sort().join(",") !==
+        tables.toSorted().join(",")) ||
+    (legacy ? legacyTables : tables).some(
       (t) =>
         !Array.isArray(value.data[t]) ||
         value.data[t].some(
@@ -79,7 +87,9 @@ function validateBackup(value) {
       400,
       "O conteúdo do backup não confere com sua verificação de integridade.",
     );
-  return value;
+  return legacy
+    ? { ...value, data: { ...value.data, zencontrol_installations: [] } }
+    : value;
 }
 async function verifyCurrent(client, expected) {
   if (typeof expected !== "string" || !/^[a-f0-9]{64}$/.test(expected))
@@ -197,11 +207,11 @@ function configureAdmin(app, pool, auth) {
       const data = await verifyCurrent(client, req.body.expectedChecksum);
       if (scope === "all")
         await client.query(
-          "TRUNCATE eventos_seriais,movimentacoes,equipamentos_seriais,estoque_tecnicos,tecnicos,produtos RESTART IDENTITY",
+          "TRUNCATE zencontrol_installations,eventos_seriais,movimentacoes,equipamentos_seriais,estoque_tecnicos,tecnicos,produtos RESTART IDENTITY",
         );
       else {
         await client.query(
-          "TRUNCATE eventos_seriais,movimentacoes,equipamentos_seriais,estoque_tecnicos RESTART IDENTITY",
+          "TRUNCATE zencontrol_installations,eventos_seriais,movimentacoes,equipamentos_seriais,estoque_tecnicos RESTART IDENTITY",
         );
         await client.query("UPDATE produtos SET quantidade_matriz=0");
       }
@@ -222,7 +232,7 @@ function configureAdmin(app, pool, auth) {
     await transaction(pool, async (client) => {
       await verifyCurrent(client, req.body.expectedChecksum);
       await client.query(
-        "TRUNCATE eventos_seriais,movimentacoes,equipamentos_seriais,estoque_tecnicos,tecnicos,produtos RESTART IDENTITY",
+        "TRUNCATE zencontrol_installations,eventos_seriais,movimentacoes,equipamentos_seriais,estoque_tecnicos,tecnicos,produtos RESTART IDENTITY",
       );
       for (const table of tables) {
         // Table/column names come only from our fixed schema; values are parameterized.
@@ -243,7 +253,9 @@ function configureAdmin(app, pool, auth) {
             `INSERT INTO ${table} (${columns.map((c) => `"${c}"`).join(",")}) SELECT ${columns.map((c) => `"${c}"`).join(",")} FROM json_populate_recordset(NULL::${table},$1::json)`,
             [JSON.stringify(value.data[table])],
           );
-        if (table !== "equipamentos_seriais")
+        if (
+          !["equipamentos_seriais", "zencontrol_installations"].includes(table)
+        )
           await client.query(
             `SELECT setval(pg_get_serial_sequence('${table}','id'),COALESCE(MAX(id),1),MAX(id) IS NOT NULL) FROM ${table}`,
           );

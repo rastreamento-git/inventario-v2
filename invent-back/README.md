@@ -140,3 +140,11 @@ Esse modo cria e remove esquemas temporários, nunca deve apontar para produçã
 O teste local com PGlite possui uma conexão e enfileira acessos; não reproduz a concorrência de
 várias conexões. A entrega foi validada localmente com PGlite e navegador; não
 houve acesso ao banco ou à hospedagem do projeto em produção.
+
+## Integração com ZenControl
+
+A migração aditiva `003_zencontrol.sql` cria recibos de instalação com chave idempotente e unicidade por origem/OS. Configure `ZENCONTROL_INTEGRATION_SECRET` com pelo menos 32 caracteres, igual a `STOCK_API_SECRET` no servidor ZenControl. Sem esse segredo, o adaptador responde indisponível. Ele não depende de um login de operador e a chave nunca deve ser enviada ao navegador.
+
+O prefixo `/api/integrations/zencontrol` oferece catálogo, carga por técnico e `POST /installations` autenticado por Bearer. Instalação exige `Idempotency-Key` e `{source_system,order_id,submission_id,technician_id,serials,operator}`. Confere todos os seriais na carga correta e reutiliza a regra `instalar`: `USO_FINAL`, estado `INSTALADO`, auditoria e saldo. O lote inteiro e seu recibo são confirmados na mesma transação. Chave repetida com mesmos dados retorna o recibo anterior; dados diferentes ou segunda chave para a mesma OS retornam 409. Backups atuais preservam os recibos; backups antigos sem a tabela continuam aceitos.
+
+O ZenControl só conclui a OS após validar o recibo. Sua central aprova o retorno enviado pelo técnico. Este adaptador não altera os fluxos existentes de triagem, devolução ou estorno.
