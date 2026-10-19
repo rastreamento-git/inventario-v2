@@ -1,3 +1,4 @@
+import { passwordInputProps, passwordRequirements } from "../lib/password-policy";
 import { useEffect, useRef, useState } from "react";
 import {
   Download,
@@ -288,21 +289,20 @@ export default function AdminTools({ panel, onClose, onReset }) {
                     name="password"
                     required
                     type="password"
-                    minLength={12}
-                    maxLength={128}
+                    {...passwordInputProps}
                     autoComplete="new-password"
                     value={form.password}
                     onChange={change}
                   />
                 </label>
+                <p className="dialog-description">{passwordRequirements}</p>
                 <label>
                   Repetir senha
                   <input
                     name="repeat"
                     required
                     type="password"
-                    minLength={12}
-                    maxLength={128}
+                    {...passwordInputProps}
                     autoComplete="new-password"
                     value={form.repeat}
                     onChange={change}
@@ -552,14 +552,14 @@ export default function AdminTools({ panel, onClose, onReset }) {
               Nova senha
               <input
                 type="password"
-                minLength={12}
-                maxLength={128}
+                {...passwordInputProps}
                 autoComplete="new-password"
                 required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
             </label>
+            <p className="field-hint">{passwordRequirements}</p>
             {editing.id === user?.id && (
               <p className="field-hint">
                 Após alterar sua senha, entre novamente.
