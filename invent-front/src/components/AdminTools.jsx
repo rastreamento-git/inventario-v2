@@ -13,6 +13,7 @@ import { useSession } from "../lib/session";
 import { notify, confirmAction } from "../lib/feedback";
 import { downloadJson } from "../lib/download";
 import Modal from "./Modal";
+import ZenCentralLink from "./ZenCentralLink";
 
 export default function AdminTools({ panel, onClose, onReset }) {
   const user = useSession();
@@ -38,8 +39,9 @@ export default function AdminTools({ panel, onClose, onReset }) {
     setUsers(data);
   }
   useEffect(() => {
-    if (panel === "users") loadUsers().catch((e) => setError(errorMessage(e)));
-  }, [panel]);
+    if (panel === "users" && user?.identity_provider !== "zen")
+      loadUsers().catch((e) => setError(errorMessage(e)));
+  }, [panel, user?.identity_provider]);
   function change(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
@@ -242,7 +244,16 @@ export default function AdminTools({ panel, onClose, onReset }) {
             {error}
           </div>
         )}
-        {panel === "users" ? (
+        {panel === "users" && user?.identity_provider === "zen" ? (
+          <section>
+            <h3>Contas gerenciadas no ZenControl</h3>
+            <p>
+              Cadastre usuários e ajuste os perfis na central. A mesma conta dá
+              acesso ao estoque.
+            </p>
+            <ZenCentralLink />
+          </section>
+        ) : panel === "users" ? (
           <>
             <form className="admin-user-form" onSubmit={create}>
               <h3>

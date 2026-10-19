@@ -1,3 +1,4 @@
+import ZenCentralLink from "./components/ZenCentralLink";
 import {
   lazy,
   Suspense,
@@ -467,6 +468,7 @@ export default function App() {
               ))}
             </div>
           ))}
+          <ZenCentralLink />
         </nav>
 
         <div className="sidebar-footer">
@@ -482,7 +484,13 @@ export default function App() {
             title="Sair"
             aria-label="Sair"
             disabled={busy}
-            onClick={() => {
+            onClick={async () => {
+              try {
+                await api.post("/auth/logout", {});
+              } catch (e) {
+                notify(errorMessage(e), "error");
+                return;
+              }
               saveToken(null);
               window.dispatchEvent(
                 new CustomEvent("invent:unauthorized", {

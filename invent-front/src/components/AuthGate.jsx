@@ -3,7 +3,9 @@ import { Box } from "lucide-react";
 import { api, errorMessage, saveToken } from "../lib/api";
 import { SessionContext } from "../lib/session";
 import AppFooter from "./AppFooter";
+import { prepareAccess, beginLogin } from "../lib/sso";
 export default function AuthGate({ children }) {
+  const [access, setAccess] = useState(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [user, setUser] = useState(null);
@@ -14,6 +16,9 @@ export default function AuthGate({ children }) {
     setStatus("loading");
     setError("");
     try {
+      const config = await prepareAccess("stock");
+      setAccess(config);
+      if (config.redirecting) return;
       const { data } = await api.get("/auth/session");
       setUser(data.user);
       setStatus(data.authenticated ? "ready" : "login");
@@ -84,6 +89,28 @@ export default function AuthGate({ children }) {
                 Tentar novamente
               </button>
             </>
+          ) : access?.unified_login ? (
+            <div className="auth-form">
+              <p className="auth-description">
+                Use a mesma conta do ZenControl para acessar o estoque.
+              </p>
+              {error && <p role="alert">{error}</p>}
+              <button
+                className="primary-button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await beginLogin("stock", access);
+                  } catch (e) {
+                    setError(e.message);
+                    setBusy(false);
+                  }
+                }}
+              >
+                Entrar com conta ZEN
+              </button>
+            </div>
           ) : (
             <form onSubmit={submitLogin} className="auth-form">
               <p className="auth-description">
