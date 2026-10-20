@@ -12,7 +12,7 @@ export default function ZenCentralLink() {
   }, []);
   return url ? (
     <a className="nav-item" href={url}>
-      Abrir ZenControl
+      ZenTracking · Aplicativos
     </a>
   ) : null;
 }

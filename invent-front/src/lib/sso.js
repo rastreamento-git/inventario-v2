@@ -58,7 +58,7 @@ export function prepareAccess(app) {
           Date.now() - proof.created > 5 * 60000
         )
           throw Error(
-            "Este acesso expirou ou foi aberto em outra aba. Use Entrar com conta ZEN novamente.",
+            "Este acesso expirou ou foi aberto em outra aba. Use Entrar no ZenTracking novamente.",
           );
         const { data } = await api.post("/auth/sso/exchange", {
           app,

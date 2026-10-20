@@ -113,7 +113,7 @@ export default function App() {
   const [traceSearch, setTraceSearch] = useState("");
   const [adminPanel, setAdminPanel] = useState(null);
   function openAdmin(panel) {
-    if (user?.papel !== "admin") {
+    if (!["admin", "operador"].includes(user?.papel)) {
       notify("Esta ação exige um administrador.", "error");
       return;
     }
@@ -563,7 +563,7 @@ export default function App() {
               {notificationsOn && <span className="notification-dot" />}
             </button>
 
-            {user?.papel === "admin" && (
+            {["admin", "operador"].includes(user?.papel) && (
               <button
                 type="button"
                 className="icon-button"

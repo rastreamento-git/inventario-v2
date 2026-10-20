@@ -92,7 +92,7 @@ export default function AuthGate({ children }) {
           ) : access?.unified_login ? (
             <div className="auth-form">
               <p className="auth-description">
-                Use a mesma conta do ZenControl para acessar o estoque.
+                Use sua conta ZenTracking para acessar o EstoquePro.
               </p>
               {error && <p role="alert">{error}</p>}
               <button
@@ -108,7 +108,7 @@ export default function AuthGate({ children }) {
                   }
                 }}
               >
-                Entrar com conta ZEN
+                Entrar no ZenTracking
               </button>
             </div>
           ) : (
