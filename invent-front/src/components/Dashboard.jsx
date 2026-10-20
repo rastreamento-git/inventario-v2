@@ -157,21 +157,21 @@ export default function Dashboard({
 
                 <CartesianGrid
                   vertical={false}
-                  stroke="#edf1f4"
+                  stroke="var(--ep-line)"
                   strokeDasharray="4 4"
                 />
                 <XAxis
                   dataKey="dia"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  tick={{ fill: "var(--ep-muted)", fontSize: 12 }}
                   dy={10}
                 />
                 <YAxis
                   allowDecimals={false}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  tick={{ fill: "var(--ep-muted)", fontSize: 12 }}
                 />
                 <Tooltip
                   cursor={{ fill: "var(--ep-primary-soft)", radius: 8 }}

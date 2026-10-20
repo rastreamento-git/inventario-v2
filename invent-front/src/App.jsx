@@ -1,3 +1,5 @@
+import ThemeControl from "./components/ThemeControl";
+import ZenMark from "./components/ZenMark";
 import ZenCentralLink from "./components/ZenCentralLink";
 import {
   lazy,
@@ -433,7 +435,7 @@ export default function App() {
       >
         <div className="brand">
           <span className="brand-mark">
-            <Box size={23} />
+            <ZenMark variant="stock" size={36} />
           </span>
           <div>
             <strong>
@@ -540,6 +542,7 @@ export default function App() {
             </button>
           </form>
           <div className="topbar-actions">
+            <ThemeControl />
             <span className="header-date">
               {new Date().toLocaleDateString("pt-BR", {
                 day: "2-digit",
