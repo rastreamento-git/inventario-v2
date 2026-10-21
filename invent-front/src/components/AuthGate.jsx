@@ -1,7 +1,7 @@
 import ThemeControl from "./ThemeControl";
+import AuthStory from "./AuthStory";
 import ZenMark from "./ZenMark";
 import { useEffect, useState } from "react";
-import { Box } from "lucide-react";
 import { api, errorMessage, saveToken } from "../lib/api";
 import { SessionContext } from "../lib/session";
 import AppFooter from "./AppFooter";
@@ -71,6 +71,7 @@ export default function AuthGate({ children }) {
         <ThemeControl />
       </div>
       <div className="auth-layout">
+        <AuthStory />
         <section className="auth-card" aria-labelledby="auth-title">
           <div className="auth-brand">
             <span className="brand-mark">

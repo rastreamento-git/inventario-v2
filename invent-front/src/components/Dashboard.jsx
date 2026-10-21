@@ -9,7 +9,6 @@ import {
 } from "recharts";
 import {
   ArrowUpRight,
-  CalendarDays,
   Package,
   Users,
   ShieldCheck,
@@ -17,6 +16,7 @@ import {
   PackagePlus,
   Truck,
   Search,
+  Plus,
 } from "lucide-react";
 
 const number = (value) => Number(value || 0).toLocaleString("pt-BR");
@@ -89,9 +89,12 @@ export default function Dashboard({
             Disponibilidade, instalações e desempenho da equipe em um só lugar.
           </p>
         </div>
-        <span className="intro-chip">
-          <CalendarDays size={15} /> Resumo das instalações
-        </span>
+        <button
+          className="primary-button"
+          onClick={() => onNavigate("entrada")}
+        >
+          <Plus size={17} /> Registrar entrada
+        </button>
       </div>
 
       <div className="stat-grid">

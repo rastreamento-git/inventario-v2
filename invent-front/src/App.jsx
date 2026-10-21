@@ -421,6 +421,9 @@ export default function App() {
 
   return (
     <div className="inventory-app">
+      <a className="skip-link" href="#inventory-content">
+        Ir para o conteúdo
+      </a>
       {menu && (
         <button
           className="sidebar-backdrop"
@@ -584,7 +587,12 @@ export default function App() {
           </div>
         </header>
 
-        <div className="app-content" ref={contentRef}>
+        <div
+          className="app-content"
+          id="inventory-content"
+          tabIndex={-1}
+          ref={contentRef}
+        >
           <div className="sync-toolbar">
             <span
               role="status"

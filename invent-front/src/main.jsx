@@ -7,6 +7,7 @@ import App from "./App.jsx";
 import AuthGate from "./components/AuthGate";
 
 import "./styles/appearance.css";
+import "./styles/experience.css";
 initializeAppearance();
 createRoot(document.getElementById("root")).render(
   <StrictMode>

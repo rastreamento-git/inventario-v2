@@ -1,4 +1,5 @@
 import { appearanceUrl } from "../lib/appearance";
+import { LayoutGrid } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 export default function ZenCentralLink() {
@@ -20,7 +21,8 @@ export default function ZenCentralLink() {
         window.location.assign(appearanceUrl(url));
       }}
     >
-      ZenTracking · Aplicativos
+      <LayoutGrid size={18} />
+      <span>ZenTracking · Aplicativos</span>
     </a>
   ) : null;
 }
