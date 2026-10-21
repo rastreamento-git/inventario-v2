@@ -1,3 +1,4 @@
+import { passwordInputProps, passwordRequirements } from "../lib/password-policy";
 import { useEffect, useRef, useState } from "react";
 import {
   Download,
@@ -13,6 +14,7 @@ import { useSession } from "../lib/session";
 import { notify, confirmAction } from "../lib/feedback";
 import { downloadJson } from "../lib/download";
 import Modal from "./Modal";
+import ZenCentralLink from "./ZenCentralLink";
 
 export default function AdminTools({ panel, onClose, onReset }) {
   const user = useSession();
@@ -38,8 +40,9 @@ export default function AdminTools({ panel, onClose, onReset }) {
     setUsers(data);
   }
   useEffect(() => {
-    if (panel === "users") loadUsers().catch((e) => setError(errorMessage(e)));
-  }, [panel]);
+    if (panel === "users" && user?.identity_provider !== "zen")
+      loadUsers().catch((e) => setError(errorMessage(e)));
+  }, [panel, user?.identity_provider]);
   function change(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
@@ -242,7 +245,16 @@ export default function AdminTools({ panel, onClose, onReset }) {
             {error}
           </div>
         )}
-        {panel === "users" ? (
+        {panel === "users" && user?.identity_provider === "zen" ? (
+          <section>
+            <h3>Contas gerenciadas no ZenControl</h3>
+            <p>
+              Cadastre usuários e ajuste os perfis na central. A mesma conta dá
+              acesso ao estoque.
+            </p>
+            <ZenCentralLink />
+          </section>
+        ) : panel === "users" ? (
           <>
             <form className="admin-user-form" onSubmit={create}>
               <h3>
@@ -277,21 +289,20 @@ export default function AdminTools({ panel, onClose, onReset }) {
                     name="password"
                     required
                     type="password"
-                    minLength={12}
-                    maxLength={128}
+                    {...passwordInputProps}
                     autoComplete="new-password"
                     value={form.password}
                     onChange={change}
                   />
                 </label>
+                <p className="dialog-description">{passwordRequirements}</p>
                 <label>
                   Repetir senha
                   <input
                     name="repeat"
                     required
                     type="password"
-                    minLength={12}
-                    maxLength={128}
+                    {...passwordInputProps}
                     autoComplete="new-password"
                     value={form.repeat}
                     onChange={change}
@@ -541,14 +552,14 @@ export default function AdminTools({ panel, onClose, onReset }) {
               Nova senha
               <input
                 type="password"
-                minLength={12}
-                maxLength={128}
+                {...passwordInputProps}
                 autoComplete="new-password"
                 required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
             </label>
+            <p className="field-hint">{passwordRequirements}</p>
             {editing.id === user?.id && (
               <p className="field-hint">
                 Após alterar sua senha, entre novamente.

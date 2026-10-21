@@ -1,3 +1,6 @@
+import ThemeControl from "./components/ThemeControl";
+import ZenMark from "./components/ZenMark";
+import ZenCentralLink from "./components/ZenCentralLink";
 import {
   lazy,
   Suspense,
@@ -112,7 +115,7 @@ export default function App() {
   const [traceSearch, setTraceSearch] = useState("");
   const [adminPanel, setAdminPanel] = useState(null);
   function openAdmin(panel) {
-    if (user?.papel !== "admin") {
+    if (!["admin", "operador"].includes(user?.papel)) {
       notify("Esta ação exige um administrador.", "error");
       return;
     }
@@ -418,6 +421,9 @@ export default function App() {
 
   return (
     <div className="inventory-app">
+      <a className="skip-link" href="#inventory-content">
+        Ir para o conteúdo
+      </a>
       {menu && (
         <button
           className="sidebar-backdrop"
@@ -432,7 +438,7 @@ export default function App() {
       >
         <div className="brand">
           <span className="brand-mark">
-            <Box size={23} />
+            <ZenMark variant="stock" size={36} />
           </span>
           <div>
             <strong>
@@ -467,6 +473,7 @@ export default function App() {
               ))}
             </div>
           ))}
+          <ZenCentralLink />
         </nav>
 
         <div className="sidebar-footer">
@@ -482,7 +489,13 @@ export default function App() {
             title="Sair"
             aria-label="Sair"
             disabled={busy}
-            onClick={() => {
+            onClick={async () => {
+              try {
+                await api.post("/auth/logout", {});
+              } catch (e) {
+                notify(errorMessage(e), "error");
+                return;
+              }
               saveToken(null);
               window.dispatchEvent(
                 new CustomEvent("invent:unauthorized", {
@@ -532,6 +545,7 @@ export default function App() {
             </button>
           </form>
           <div className="topbar-actions">
+            <ThemeControl />
             <span className="header-date">
               {new Date().toLocaleDateString("pt-BR", {
                 day: "2-digit",
@@ -555,7 +569,7 @@ export default function App() {
               {notificationsOn && <span className="notification-dot" />}
             </button>
 
-            {user?.papel === "admin" && (
+            {["admin", "operador"].includes(user?.papel) && (
               <button
                 type="button"
                 className="icon-button"
@@ -573,7 +587,12 @@ export default function App() {
           </div>
         </header>
 
-        <div className="app-content" ref={contentRef}>
+        <div
+          className="app-content"
+          id="inventory-content"
+          tabIndex={-1}
+          ref={contentRef}
+        >
           <div className="sync-toolbar">
             <span
               role="status"

@@ -1,9 +1,13 @@
+import ThemeControl from "./ThemeControl";
+import AuthStory from "./AuthStory";
+import ZenMark from "./ZenMark";
 import { useEffect, useState } from "react";
-import { Box } from "lucide-react";
 import { api, errorMessage, saveToken } from "../lib/api";
 import { SessionContext } from "../lib/session";
 import AppFooter from "./AppFooter";
+import { prepareAccess, beginLogin } from "../lib/sso";
 export default function AuthGate({ children }) {
+  const [access, setAccess] = useState(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [user, setUser] = useState(null);
@@ -14,6 +18,9 @@ export default function AuthGate({ children }) {
     setStatus("loading");
     setError("");
     try {
+      const config = await prepareAccess("stock");
+      setAccess(config);
+      if (config.redirecting) return;
       const { data } = await api.get("/auth/session");
       setUser(data.user);
       setStatus(data.authenticated ? "ready" : "login");
@@ -60,11 +67,15 @@ export default function AuthGate({ children }) {
     );
   return (
     <main className="auth-page">
+      <div className="auth-appearance">
+        <ThemeControl />
+      </div>
       <div className="auth-layout">
+        <AuthStory />
         <section className="auth-card" aria-labelledby="auth-title">
           <div className="auth-brand">
             <span className="brand-mark">
-              <Box size={24} aria-hidden="true" />
+              <ZenMark variant="stock" size={44} />
             </span>
             <div>
               <h1 id="auth-title">
@@ -84,6 +95,28 @@ export default function AuthGate({ children }) {
                 Tentar novamente
               </button>
             </>
+          ) : access?.unified_login ? (
+            <div className="auth-form">
+              <p className="auth-description">
+                Use sua conta ZenTracking para acessar o EstoquePro.
+              </p>
+              {error && <p role="alert">{error}</p>}
+              <button
+                className="primary-button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await beginLogin("stock", access);
+                  } catch (e) {
+                    setError(e.message);
+                    setBusy(false);
+                  }
+                }}
+              >
+                Entrar no ZenTracking
+              </button>
+            </div>
           ) : (
             <form onSubmit={submitLogin} className="auth-form">
               <p className="auth-description">

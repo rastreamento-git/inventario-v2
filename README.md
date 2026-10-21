@@ -46,3 +46,6 @@ Frontend: `npm test`, `npm run lint`, `npm run format:check`, `npm run build`.
 Backend: `npm test`, `npm run check`.
 
 Testes de banco locais usam PGlite (PostgreSQL em WASM). Para testar múltiplas conexões, configure `TEST_DATABASE_URL` com um PostgreSQL exclusivo para testes. Nunca use produção nessa variável. O navegador também foi validado com o build de produção e um banco temporário, incluindo download, reset e restauração.
+
+
+A integração de homologação com o ZenControl admite reinstalação com reaproveitamento. `POST /api/integrations/zencontrol/reusable-items` consulta exclusivamente os códigos enviados; `POST /installations` aceita `reuse: true` para aparelhos já instalados. O recibo é idempotente, registra o evento de reinstalação e preserva os saldos de carga, sem uma segunda movimentação de uso final. A confirmação física do equipamento/veículo é feita pela central na conferência das evidências. O segredo da integração continua restrito aos backends.

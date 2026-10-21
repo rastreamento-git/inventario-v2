@@ -9,7 +9,6 @@ import {
 } from "recharts";
 import {
   ArrowUpRight,
-  CalendarDays,
   Package,
   Users,
   ShieldCheck,
@@ -17,6 +16,7 @@ import {
   PackagePlus,
   Truck,
   Search,
+  Plus,
 } from "lucide-react";
 
 const number = (value) => Number(value || 0).toLocaleString("pt-BR");
@@ -89,9 +89,12 @@ export default function Dashboard({
             Disponibilidade, instalações e desempenho da equipe em um só lugar.
           </p>
         </div>
-        <span className="intro-chip">
-          <CalendarDays size={15} /> Resumo das instalações
-        </span>
+        <button
+          className="primary-button"
+          onClick={() => onNavigate("entrada")}
+        >
+          <Plus size={17} /> Registrar entrada
+        </button>
       </div>
 
       <div className="stat-grid">
@@ -157,21 +160,21 @@ export default function Dashboard({
 
                 <CartesianGrid
                   vertical={false}
-                  stroke="#edf1f4"
+                  stroke="var(--ep-line)"
                   strokeDasharray="4 4"
                 />
                 <XAxis
                   dataKey="dia"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  tick={{ fill: "var(--ep-muted)", fontSize: 12 }}
                   dy={10}
                 />
                 <YAxis
                   allowDecimals={false}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  tick={{ fill: "var(--ep-muted)", fontSize: 12 }}
                 />
                 <Tooltip
                   cursor={{ fill: "var(--ep-primary-soft)", radius: 8 }}
