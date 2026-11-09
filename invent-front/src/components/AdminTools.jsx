@@ -1,4 +1,7 @@
-import { passwordInputProps, passwordRequirements } from "../lib/password-policy";
+import {
+  passwordInputProps,
+  passwordRequirements,
+} from "../lib/password-policy";
 import { useEffect, useRef, useState } from "react";
 import {
   Download,

@@ -112,7 +112,7 @@ export default function App() {
     .join("")
     .toUpperCase();
   const [globalSearch, setGlobalSearch] = useState("");
-  const [traceSearch, setTraceSearch] = useState("");
+  const [traceSearch, setTraceSearch] = useState({ term: "", revision: 0 });
   const [adminPanel, setAdminPanel] = useState(null);
   function openAdmin(panel) {
     if (!["admin", "operador"].includes(user?.papel)) {
@@ -136,7 +136,10 @@ export default function App() {
       openAdmin(action);
       setGlobalSearch("");
     } else {
-      setTraceSearch(globalSearch.trim());
+      setTraceSearch((previous) => ({
+        term: globalSearch.trim(),
+        revision: previous.revision + 1,
+      }));
       setTab("rastreio");
       setMenu(false);
     }
@@ -718,7 +721,8 @@ export default function App() {
                   <Traceability
                     produtos={data.produtos}
                     refreshToken={updated}
-                    initialSearch={traceSearch}
+                    initialSearch={traceSearch.term}
+                    searchRevision={traceSearch.revision}
                     reload={reload}
                   />
                 )}
