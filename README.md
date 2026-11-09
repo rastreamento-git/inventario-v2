@@ -1,8 +1,10 @@
-# Inventário v2 — Estoque Pro 1.3
+# Estoque Pro · Inventário e rastreabilidade
 
-Projeto com frontend React/Vite e API Express/PostgreSQL. Os arquivos de aplicação ficam exclusivamente em `invent-front/` e `invent-back/`.
+Aplicação do ecossistema ZenTracking para gerenciar rastreadores e TAGs, cargas dos técnicos, movimentações e histórico por IMEI ou serial. Projeto com frontend React/Vite e API Express/PostgreSQL. Os arquivos de aplicação ficam exclusivamente em `invent-front/` e `invent-back/`.
 
-## Nesta atualização
+Esta revisão parte de `feat/ecossistema-homologacao`, que integra o Estoque Pro ao ZenControl e ao ZenField. Os repositórios separados `invent-front` e `invent-back` preservam a estrutura anterior.
+
+## Recursos
 
 - Rastreabilidade global separada da triagem: lista equipamentos atuais, arquivados e cancelados com histórico registrado.
 - Busca por IMEI/serial, modelo, tipo, técnico e operador; filtros e paginação no servidor.

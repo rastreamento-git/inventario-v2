@@ -36,5 +36,6 @@
   },
   "engines": {
     "node": "24.x"
-  }
+  },
+  "description": "Interface do Estoque Pro para equipamentos, cargas técnicas e rastreabilidade."
 }

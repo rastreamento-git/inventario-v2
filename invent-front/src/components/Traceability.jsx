@@ -68,6 +68,7 @@ export default function Traceability({
   produtos,
   refreshToken,
   initialSearch = "",
+  searchRevision = 0,
   reload,
 }) {
   const [q, setQ] = useState(initialSearch),
@@ -111,8 +112,12 @@ export default function Traceability({
   const detailRequest = useRef(0);
   useEffect(() => {
     setQ(initialSearch);
+    setStatus("TODOS");
+    setCategory("TODOS");
+    setTech("");
+    setArchive("todos");
     setPage(1);
-  }, [initialSearch]);
+  }, [initialSearch, searchRevision]);
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebounced(q);
