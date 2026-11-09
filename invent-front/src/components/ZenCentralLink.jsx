@@ -1,5 +1,5 @@
 import { appearanceUrl } from "../lib/appearance";
-import { LayoutGrid } from "lucide-react";
+import { LayoutGrid, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 export default function ZenCentralLink() {
@@ -12,17 +12,24 @@ export default function ZenCentralLink() {
       })
       .catch(() => {});
   }, []);
-  return url ? (
+  if (!url) return null;
+  const profile = new URL(url);
+  profile.searchParams.set("perfil", "1");
+  return [
+    [url, "ZenTracking · Aplicativos", LayoutGrid],
+    [profile.href, "Meu perfil ZenTracking", UserRound],
+  ].map(([href, label, Icon]) => (
     <a
+      key={label}
       className="nav-item"
-      href={url}
+      href={href}
       onClick={(e) => {
         e.preventDefault();
-        window.location.assign(appearanceUrl(url));
+        window.location.assign(appearanceUrl(href));
       }}
     >
-      <LayoutGrid size={18} />
-      <span>ZenTracking · Aplicativos</span>
+      <Icon size={18} />
+      <span>{label}</span>
     </a>
-  ) : null;
+  ));
 }
