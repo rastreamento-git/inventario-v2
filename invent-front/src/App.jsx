@@ -423,7 +423,7 @@ export default function App() {
           : "Ativar notificações";
 
   return (
-    <div className="inventory-app">
+    <div className="inventory-app zen-shell zen-shell-stock">
       <a className="skip-link" href="#inventory-content">
         Ir para o conteúdo
       </a>

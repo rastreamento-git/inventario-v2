@@ -8,6 +8,7 @@ import AuthGate from "./components/AuthGate";
 
 import "./styles/appearance.css";
 import "./styles/experience.css";
+import "./styles/signal-theme.css";
 initializeAppearance();
 createRoot(document.getElementById("root")).render(
   <StrictMode>

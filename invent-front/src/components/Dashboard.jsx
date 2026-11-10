@@ -153,8 +153,8 @@ export default function Dashboard({
                     x2="0"
                     y2="1"
                   >
-                    <stop offset="0%" stopColor="#2563eb" />
-                    <stop offset="100%" stopColor="#1d4ed8" />
+                    <stop offset="0%" stopColor="var(--zen-stock)" />
+                    <stop offset="100%" stopColor="var(--ep-primary)" />
                   </linearGradient>
                 </defs>
 

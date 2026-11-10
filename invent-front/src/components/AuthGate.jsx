@@ -1,5 +1,5 @@
 import ThemeControl from "./ThemeControl";
-import AuthStory from "./AuthStory";
+import AuthStory, { AuthApps } from "./AuthStory";
 import ZenMark from "./ZenMark";
 import { useEffect, useState } from "react";
 import { api, errorMessage, saveToken } from "../lib/api";
@@ -66,11 +66,17 @@ export default function AuthGate({ children }) {
       <SessionContext.Provider value={user}>{children}</SessionContext.Provider>
     );
   return (
-    <main className="auth-page">
-      <div className="auth-appearance">
-        <ThemeControl />
-      </div>
-      <div className="auth-layout">
+    <div className="auth-page">
+      <header className="auth-site-header">
+        <div className="auth-site-nav">
+          <span className="auth-site-brand">
+            <ZenMark variant="tracking" size={32} />
+            ZenTracking
+          </span>
+          <ThemeControl />
+        </div>
+      </header>
+      <main className="auth-layout">
         <AuthStory />
         <section className="auth-card" aria-labelledby="auth-title">
           <div className="auth-brand">
@@ -152,8 +158,9 @@ export default function AuthGate({ children }) {
             </form>
           )}
         </section>
-      </div>
+        <AuthApps />
+      </main>
       <AppFooter />
-    </main>
+    </div>
   );
 }
