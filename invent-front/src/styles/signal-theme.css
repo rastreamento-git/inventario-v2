@@ -283,6 +283,65 @@ body {
   border-color: var(--ep-line);
 }
 
+.stock-dashboard-top {
+  display: grid;
+  gap: 22px;
+  padding: clamp(16px, 3vw, 32px);
+  margin-bottom: 22px;
+  border: 1px solid var(--ep-line);
+  border-radius: var(--zen-radius);
+  background:
+    radial-gradient(ellipse at 88% 0%, var(--zen-work-glow), transparent 68%),
+    var(--ep-surface);
+}
+.stock-dashboard-top .dashboard-intro {
+  margin: 0;
+}
+.stock-dashboard-top .dashboard-intro h2 {
+  font-size: clamp(27px, 4vw, 42px);
+}
+.stock-dashboard-top .quick-action-grid {
+  margin: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 10px;
+}
+.stock-dashboard-top .quick-action-grid button {
+  min-width: 0;
+  min-height: 72px;
+  padding: 12px;
+  border-color: var(--ep-line);
+  border-radius: 13px;
+  background: var(--ep-canvas);
+  color: var(--ep-text);
+}
+.stock-dashboard-top .quick-action-grid button:hover,
+.stock-dashboard-top .quick-action-grid button:focus-visible {
+  border-color: var(--ep-primary-ink);
+  background: var(--ep-primary-soft);
+}
+.stock-dashboard-top .quick-action-grid button > svg {
+  flex-shrink: 0;
+  color: var(--ep-primary-ink);
+}
+.stock-dashboard-section-title {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--ep-text);
+}
+.stock-alert-action {
+  margin: 6px 14px 14px;
+}
+@media (max-width: 540px) {
+  .stock-dashboard-top {
+    gap: 14px;
+  }
+  .stock-dashboard-top .quick-action-grid button {
+    min-height: 56px;
+    padding: 9px;
+  }
+}
+
 #root > .auth-page {
   display: flex;
   flex-direction: column;
