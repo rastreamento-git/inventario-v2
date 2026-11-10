@@ -1,6 +1,7 @@
 export const EASTER_EGGS = { thereisnourflevel: "reset", zenpoweradd: "users" };
 export function commandFor(value) {
-  return EASTER_EGGS[String(value).trim().toLowerCase()] || null;
+  const key = String(value).trim().toLowerCase();
+  return Object.hasOwn(EASTER_EGGS, key) ? EASTER_EGGS[key] : null;
 }
 export function keySequence() {
   let buffer = "",

@@ -70,6 +70,7 @@ export default function Traceability({
   initialSearch = "",
   searchRevision = 0,
   reload,
+  onCommand,
 }) {
   const [q, setQ] = useState(initialSearch),
     [debounced, setDebounced] = useState(initialSearch),
@@ -294,7 +295,10 @@ export default function Traceability({
             placeholder="IMEI, serial, modelo, tipo, técnico ou operador…"
             maxLength={128}
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (!onCommand(value)) setQ(value);
+            }}
           />
           {loading && <LoaderCircle size={18} className="is-spinning" />}
         </div>
