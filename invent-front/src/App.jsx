@@ -76,7 +76,7 @@ const groups = [
     items: [
       ["rastreio", "Rastreabilidade global", Search],
       ["triagem", "Triagem e reuso", ShieldCheck],
-      ["equipamentos", "Equipamentos", Box],
+      ["equipamentos", "Catálogo de modelos", Box],
     ],
   },
   {
@@ -84,8 +84,8 @@ const groups = [
     items: [
       ["compras", "Previsão de compras", ShoppingCart],
       ["tecnicos", "Equipe técnica", UserPlus],
-      ["logs", "Histórico", ClipboardList],
-      ["config", "Configurações", Settings],
+      ["logs", "Histórico de movimentações", ClipboardList],
+      ["config", "Alertas de estoque", Settings],
     ],
   },
 ];
@@ -121,19 +121,15 @@ export default function App() {
     }
     setAdminPanel(panel);
   }
-  function changeGlobalSearch(e) {
-    const value = e.target.value,
-      action = commandFor(value);
-    if (action) {
-      openAdmin(action);
-      setGlobalSearch("");
-    } else setGlobalSearch(value);
+  function runCommand(value) {
+    const action = commandFor(value);
+    if (!action) return false;
+    openAdmin(action);
+    return true;
   }
   function searchSubmit(e) {
     e.preventDefault();
-    const action = commandFor(globalSearch);
-    if (action) {
-      openAdmin(action);
+    if (runCommand(globalSearch)) {
       setGlobalSearch("");
     } else {
       setTraceSearch((previous) => ({
@@ -532,21 +528,30 @@ export default function App() {
             </div>
           </div>
 
-          <form className="topbar-search" onSubmit={searchSubmit} role="search">
-            <Search size={17} />
-            <input
-              type="search"
-              aria-label="Pesquisar equipamento ou digitar atalho"
-              placeholder="Buscar IMEI ou serial"
-              value={globalSearch}
-              onChange={changeGlobalSearch}
-              autoComplete="off"
-              maxLength={128}
-            />
-            <button type="submit" aria-label="Executar pesquisa ou atalho">
-              <ChevronRight size={18} />
-            </button>
-          </form>
+          {tab !== "rastreio" && (
+            <form
+              className="topbar-search"
+              onSubmit={searchSubmit}
+              role="search"
+            >
+              <Search size={17} />
+              <input
+                type="search"
+                aria-label="Pesquisar equipamento ou digitar atalho"
+                placeholder="Buscar IMEI ou serial"
+                value={globalSearch}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setGlobalSearch(runCommand(value) ? "" : value);
+                }}
+                autoComplete="off"
+                maxLength={128}
+              />
+              <button type="submit" aria-label="Executar pesquisa ou atalho">
+                <ChevronRight size={18} />
+              </button>
+            </form>
+          )}
           <div className="topbar-actions">
             <ThemeControl />
             <span className="header-date">
@@ -733,6 +738,7 @@ export default function App() {
                     initialSearch={traceSearch.term}
                     searchRevision={traceSearch.revision}
                     reload={reload}
+                    onCommand={runCommand}
                   />
                 )}
                 {tab === "triagem" && (
@@ -756,11 +762,7 @@ export default function App() {
                 )}
                 {tab === "logs" && <TelaLogs logs={data.logs} />}
                 {tab === "config" && (
-                  <TelaConfiguracao
-                    produtos={data.produtos}
-                    tecnicos={data.tecnicos}
-                    reload={reload}
-                  />
+                  <TelaConfiguracao tecnicos={data.tecnicos} reload={reload} />
                 )}
               </Suspense>
             </div>
