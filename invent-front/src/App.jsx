@@ -63,7 +63,7 @@ const groups = [
     items: [["dashboard", "Painel de controle", LayoutDashboard]],
   },
   {
-    label: "Produção",
+    label: "Movimentações",
     items: [
       ["entrada", "Entrada na matriz", PackagePlus],
       ["transferencia", "Carga para técnico", Truck],
@@ -72,7 +72,7 @@ const groups = [
     ],
   },
   {
-    label: "Inventário",
+    label: "Consulta e triagem",
     items: [
       ["rastreio", "Rastreabilidade global", Search],
       ["triagem", "Triagem e reuso", ShieldCheck],
@@ -537,7 +537,7 @@ export default function App() {
             <input
               type="search"
               aria-label="Pesquisar equipamento ou digitar atalho"
-              placeholder="Pesquisar equipamento…"
+              placeholder="Buscar IMEI ou serial"
               value={globalSearch}
               onChange={changeGlobalSearch}
               autoComplete="off"
@@ -644,7 +644,9 @@ export default function App() {
                 </span>
                 <span>
                   <strong>
-                    {alerts.length} ponto(s) de atenção no estoque
+                    {alerts.length === 1
+                      ? "1 item abaixo do estoque mínimo"
+                      : alerts.length + " itens abaixo do estoque mínimo"}
                   </strong>
                   <small>Confira os saldos abaixo do mínimo configurado.</small>
                 </span>
@@ -664,6 +666,13 @@ export default function App() {
                   </div>
                 ))}
               </div>
+              <button
+                type="button"
+                className="secondary-button stock-alert-action"
+                onClick={() => navigate("compras")}
+              >
+                Abrir previsão de compras
+              </button>
             </details>
           )}
 

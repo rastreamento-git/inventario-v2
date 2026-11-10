@@ -16,7 +16,6 @@ import {
   PackagePlus,
   Truck,
   Search,
-  Plus,
 } from "lucide-react";
 
 const number = (value) => Number(value || 0).toLocaleString("pt-BR");
@@ -67,13 +66,13 @@ export default function Dashboard({
     ],
     [
       "transferencia",
-      "Preparar uma carga",
+      "Enviar carga ao técnico",
       "Distribuir equipamentos à equipe",
       Truck,
     ],
     [
       "rastreio",
-      "Consultar um IMEI",
+      "Rastrear IMEI ou serial",
       "Ver situação e histórico do serial",
       Search,
     ],
@@ -81,50 +80,82 @@ export default function Dashboard({
 
   return (
     <div className="dashboard-view">
-      <div className="dashboard-intro">
-        <div>
-          <span className="eyebrow">PAINEL DE CONTROLE</span>
-          <h2>Uma visão clara da operação.</h2>
-          <p>
-            Disponibilidade, instalações e desempenho da equipe em um só lugar.
-          </p>
-        </div>
-        <button
-          className="primary-button"
-          onClick={() => onNavigate("entrada")}
-        >
-          <Plus size={17} /> Registrar entrada
-        </button>
-      </div>
-
-      <div className="stat-grid">
-        {stats.map(([label, value, caption, color]) => (
-          <article className={`stat-card ${color}`} key={label}>
-            <div className="stat-card-top">
-              <span>{label}</span>
-              <span className="stat-icon">
-                <ArrowUpRight size={18} />
-              </span>
-            </div>
-            <strong className="stat-value">{number(value)}</strong>
-            <span className="stat-caption">{caption}</span>
-            <div className="stat-decoration" aria-hidden="true" />
-          </article>
-        ))}
-      </div>
-
-      <section className="stock-overview" aria-label="Resumo do inventário">
-        {stock.map(([label, value, Icon]) => (
-          <div className="stock-item" key={label}>
-            <span className="stock-icon">
-              <Icon size={19} />
+      <section
+        className="stock-dashboard-top"
+        aria-labelledby="stock-dashboard-title"
+      >
+        <div className="dashboard-intro">
+          <div>
+            <span className="eyebrow">
+              ESTOQUE PRO · INVENTÁRIO E RASTREAMENTO
             </span>
-            <div>
-              <span>{label}</span>
-              <strong>{number(value)}</strong>
-            </div>
+            <h2 id="stock-dashboard-title">Visão do estoque</h2>
+            <p>
+              Receba equipamentos, distribua cargas e acompanhe cada item pelo
+              IMEI ou serial.
+            </p>
           </div>
-        ))}
+        </div>
+        <div
+          className="quick-action-grid"
+          role="group"
+          aria-label="Ações rápidas do estoque"
+        >
+          {actions.map(([id, label, detail, Icon]) => (
+            <button type="button" key={id} onClick={() => onNavigate(id)}>
+              <span className="quick-action-icon" aria-hidden="true">
+                <Icon size={20} />
+              </span>
+              <span>
+                <strong>{label}</strong>
+                <small>{detail}</small>
+              </span>
+              <ArrowUpRight size={18} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="stock-summary-title">
+        <h3 className="stock-dashboard-section-title" id="stock-summary-title">
+          Resumo do estoque
+        </h3>
+        <div className="stock-overview">
+          {stock.map(([label, value, Icon]) => (
+            <div className="stock-item" key={label}>
+              <span className="stock-icon">
+                <Icon size={19} />
+              </span>
+              <div>
+                <span>{label}</span>
+                <strong>{number(value)}</strong>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="stock-installation-title">
+        <h3
+          className="stock-dashboard-section-title"
+          id="stock-installation-title"
+        >
+          Instalações por período
+        </h3>
+        <div className="stat-grid">
+          {stats.map(([label, value, caption, color]) => (
+            <article className={`stat-card ${color}`} key={label}>
+              <div className="stat-card-top">
+                <span>{label}</span>
+                <span className="stat-icon" aria-hidden="true">
+                  <ArrowUpRight size={18} />
+                </span>
+              </div>
+              <strong className="stat-value">{number(value)}</strong>
+              <span className="stat-caption">{caption}</span>
+            </article>
+          ))}
+        </div>
       </section>
 
       <div className="dashboard-columns">
@@ -255,27 +286,6 @@ export default function Dashboard({
           )}
         </section>
       </div>
-
-      <section className="quick-actions">
-        <div>
-          <span className="eyebrow">PRÓXIMA MOVIMENTAÇÃO</span>
-          <h3>O que você precisa fazer?</h3>
-        </div>
-        <div className="quick-action-grid">
-          {actions.map(([id, label, detail, Icon]) => (
-            <button key={id} onClick={() => onNavigate(id)}>
-              <span className="quick-action-icon">
-                <Icon size={20} />
-              </span>
-              <span>
-                <strong>{label}</strong>
-                <small>{detail}</small>
-              </span>
-              <ArrowUpRight size={18} />
-            </button>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
