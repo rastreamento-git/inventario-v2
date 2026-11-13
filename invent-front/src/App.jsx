@@ -1,3 +1,6 @@
+import ThemeControl from "./components/ThemeControl";
+import ZenMark from "./components/ZenMark";
+import ZenCentralLink from "./components/ZenCentralLink";
 import {
   lazy,
   Suspense,
@@ -52,6 +55,7 @@ import Feedback from "./components/Feedback";
 import AppFooter from "./components/AppFooter";
 const Traceability = lazy(() => import("./components/Traceability"));
 const AdminTools = lazy(() => import("./components/AdminTools"));
+const Adesivos = lazy(() => import("./components/Adesivos"));
 const Dashboard = lazy(() => import("./components/Dashboard"));
 
 const groups = [
@@ -60,7 +64,7 @@ const groups = [
     items: [["dashboard", "Painel de controle", LayoutDashboard]],
   },
   {
-    label: "Produção",
+    label: "Movimentações",
     items: [
       ["entrada", "Entrada na matriz", PackagePlus],
       ["transferencia", "Carga para técnico", Truck],
@@ -69,11 +73,12 @@ const groups = [
     ],
   },
   {
-    label: "Inventário",
+    label: "Consulta e triagem",
     items: [
       ["rastreio", "Rastreabilidade global", Search],
       ["triagem", "Triagem e reuso", ShieldCheck],
-      ["equipamentos", "Equipamentos", Box],
+      ["equipamentos", "Catálogo de modelos", Box],
+      ["adesivos", "Adesivos Perfurados", Box],
     ],
   },
   {
@@ -81,8 +86,8 @@ const groups = [
     items: [
       ["compras", "Previsão de compras", ShoppingCart],
       ["tecnicos", "Equipe técnica", UserPlus],
-      ["logs", "Histórico", ClipboardList],
-      ["config", "Configurações", Settings],
+      ["logs", "Histórico de movimentações", ClipboardList],
+      ["config", "Alertas de estoque", Settings],
     ],
   },
 ];
@@ -109,31 +114,30 @@ export default function App() {
     .join("")
     .toUpperCase();
   const [globalSearch, setGlobalSearch] = useState("");
-  const [traceSearch, setTraceSearch] = useState("");
+  const [traceSearch, setTraceSearch] = useState({ term: "", revision: 0 });
   const [adminPanel, setAdminPanel] = useState(null);
   function openAdmin(panel) {
-    if (user?.papel !== "admin") {
+    if (!["admin", "operador"].includes(user?.papel)) {
       notify("Esta ação exige um administrador.", "error");
       return;
     }
     setAdminPanel(panel);
   }
-  function changeGlobalSearch(e) {
-    const value = e.target.value,
-      action = commandFor(value);
-    if (action) {
-      openAdmin(action);
-      setGlobalSearch("");
-    } else setGlobalSearch(value);
+  function runCommand(value) {
+    const action = commandFor(value);
+    if (!action) return false;
+    openAdmin(action);
+    return true;
   }
   function searchSubmit(e) {
     e.preventDefault();
-    const action = commandFor(globalSearch);
-    if (action) {
-      openAdmin(action);
+    if (runCommand(globalSearch)) {
       setGlobalSearch("");
     } else {
-      setTraceSearch(globalSearch.trim());
+      setTraceSearch((previous) => ({
+        term: globalSearch.trim(),
+        revision: previous.revision + 1,
+      }));
       setTab("rastreio");
       setMenu(false);
     }
@@ -417,7 +421,10 @@ export default function App() {
           : "Ativar notificações";
 
   return (
-    <div className="inventory-app">
+    <div className="inventory-app zen-shell zen-shell-stock">
+      <a className="skip-link" href="#inventory-content">
+        Ir para o conteúdo
+      </a>
       {menu && (
         <button
           className="sidebar-backdrop"
@@ -432,7 +439,7 @@ export default function App() {
       >
         <div className="brand">
           <span className="brand-mark">
-            <Box size={23} />
+            <ZenMark variant="stock" size={36} />
           </span>
           <div>
             <strong>
@@ -467,6 +474,7 @@ export default function App() {
               ))}
             </div>
           ))}
+          <ZenCentralLink />
         </nav>
 
         <div className="sidebar-footer">
@@ -482,7 +490,13 @@ export default function App() {
             title="Sair"
             aria-label="Sair"
             disabled={busy}
-            onClick={() => {
+            onClick={async () => {
+              try {
+                await api.post("/auth/logout", {});
+              } catch (e) {
+                notify(errorMessage(e), "error");
+                return;
+              }
               saveToken(null);
               window.dispatchEvent(
                 new CustomEvent("invent:unauthorized", {
@@ -516,22 +530,32 @@ export default function App() {
             </div>
           </div>
 
-          <form className="topbar-search" onSubmit={searchSubmit} role="search">
-            <Search size={17} />
-            <input
-              type="search"
-              aria-label="Pesquisar equipamento ou digitar atalho"
-              placeholder="Pesquisar equipamento…"
-              value={globalSearch}
-              onChange={changeGlobalSearch}
-              autoComplete="off"
-              maxLength={128}
-            />
-            <button type="submit" aria-label="Executar pesquisa ou atalho">
-              <ChevronRight size={18} />
-            </button>
-          </form>
+          {tab !== "rastreio" && (
+            <form
+              className="topbar-search"
+              onSubmit={searchSubmit}
+              role="search"
+            >
+              <Search size={17} />
+              <input
+                type="search"
+                aria-label="Pesquisar equipamento ou digitar atalho"
+                placeholder="Buscar IMEI ou serial"
+                value={globalSearch}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setGlobalSearch(runCommand(value) ? "" : value);
+                }}
+                autoComplete="off"
+                maxLength={128}
+              />
+              <button type="submit" aria-label="Executar pesquisa ou atalho">
+                <ChevronRight size={18} />
+              </button>
+            </form>
+          )}
           <div className="topbar-actions">
+            <ThemeControl />
             <span className="header-date">
               {new Date().toLocaleDateString("pt-BR", {
                 day: "2-digit",
@@ -555,7 +579,7 @@ export default function App() {
               {notificationsOn && <span className="notification-dot" />}
             </button>
 
-            {user?.papel === "admin" && (
+            {["admin", "operador"].includes(user?.papel) && (
               <button
                 type="button"
                 className="icon-button"
@@ -573,7 +597,12 @@ export default function App() {
           </div>
         </header>
 
-        <div className="app-content" ref={contentRef}>
+        <div
+          className="app-content"
+          id="inventory-content"
+          tabIndex={-1}
+          ref={contentRef}
+        >
           <div className="sync-toolbar">
             <span
               role="status"
@@ -622,7 +651,9 @@ export default function App() {
                 </span>
                 <span>
                   <strong>
-                    {alerts.length} ponto(s) de atenção no estoque
+                    {alerts.length === 1
+                      ? "1 item abaixo do estoque mínimo"
+                      : alerts.length + " itens abaixo do estoque mínimo"}
                   </strong>
                   <small>Confira os saldos abaixo do mínimo configurado.</small>
                 </span>
@@ -642,6 +673,13 @@ export default function App() {
                   </div>
                 ))}
               </div>
+              <button
+                type="button"
+                className="secondary-button stock-alert-action"
+                onClick={() => navigate("compras")}
+              >
+                Abrir previsão de compras
+              </button>
             </details>
           )}
 
@@ -666,6 +704,7 @@ export default function App() {
                     onNavigate={navigate}
                   />
                 )}
+                {tab === "adesivos" && <Adesivos reload={reload} />}
                 {tab === "entrada" && (
                   <TelaEntrada produtos={data.produtos} reload={reload} />
                 )}
@@ -699,8 +738,10 @@ export default function App() {
                   <Traceability
                     produtos={data.produtos}
                     refreshToken={updated}
-                    initialSearch={traceSearch}
+                    initialSearch={traceSearch.term}
+                    searchRevision={traceSearch.revision}
                     reload={reload}
+                    onCommand={runCommand}
                   />
                 )}
                 {tab === "triagem" && (
@@ -724,11 +765,7 @@ export default function App() {
                 )}
                 {tab === "logs" && <TelaLogs logs={data.logs} />}
                 {tab === "config" && (
-                  <TelaConfiguracao
-                    produtos={data.produtos}
-                    tecnicos={data.tecnicos}
-                    reload={reload}
-                  />
+                  <TelaConfiguracao tecnicos={data.tecnicos} reload={reload} />
                 )}
               </Suspense>
             </div>

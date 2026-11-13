@@ -1,8 +1,10 @@
-# Inventário v2 — Estoque Pro 1.3
+# Estoque Pro · Inventário e rastreabilidade
 
-Projeto com frontend React/Vite e API Express/PostgreSQL. Os arquivos de aplicação ficam exclusivamente em `invent-front/` e `invent-back/`.
+Aplicação do ecossistema ZenTracking para gerenciar rastreadores e TAGs, cargas dos técnicos, movimentações e histórico por IMEI ou serial. Projeto com frontend React/Vite e API Express/PostgreSQL. Os arquivos de aplicação ficam exclusivamente em `invent-front/` e `invent-back/`.
 
-## Nesta atualização
+Esta revisão parte de `feat/ecossistema-homologacao`, que integra o Estoque Pro ao ZenControl e ao ZenField. Os repositórios separados `invent-front` e `invent-back` preservam a estrutura anterior.
+
+## Recursos
 
 - Rastreabilidade global separada da triagem: lista equipamentos atuais, arquivados e cancelados com histórico registrado.
 - Busca por IMEI/serial, modelo, tipo, técnico e operador; filtros e paginação no servidor.
@@ -46,3 +48,6 @@ Frontend: `npm test`, `npm run lint`, `npm run format:check`, `npm run build`.
 Backend: `npm test`, `npm run check`.
 
 Testes de banco locais usam PGlite (PostgreSQL em WASM). Para testar múltiplas conexões, configure `TEST_DATABASE_URL` com um PostgreSQL exclusivo para testes. Nunca use produção nessa variável. O navegador também foi validado com o build de produção e um banco temporário, incluindo download, reset e restauração.
+
+
+A integração de homologação com o ZenControl admite reinstalação com reaproveitamento. `POST /api/integrations/zencontrol/reusable-items` consulta exclusivamente os códigos enviados; `POST /installations` aceita `reuse: true` para aparelhos já instalados. O recibo é idempotente, registra o evento de reinstalação e preserva os saldos de carga, sem uma segunda movimentação de uso final. A confirmação física do equipamento/veículo é feita pela central na conferência das evidências. O segredo da integração continua restrito aos backends.
