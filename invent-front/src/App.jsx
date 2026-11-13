@@ -55,6 +55,7 @@ import Feedback from "./components/Feedback";
 import AppFooter from "./components/AppFooter";
 const Traceability = lazy(() => import("./components/Traceability"));
 const AdminTools = lazy(() => import("./components/AdminTools"));
+const Adesivos = lazy(() => import("./components/Adesivos"));
 const Dashboard = lazy(() => import("./components/Dashboard"));
 
 const groups = [
@@ -77,6 +78,7 @@ const groups = [
       ["rastreio", "Rastreabilidade global", Search],
       ["triagem", "Triagem e reuso", ShieldCheck],
       ["equipamentos", "Catálogo de modelos", Box],
+      ["adesivos", "Adesivos Perfurados", Box],
     ],
   },
   {
@@ -702,6 +704,7 @@ export default function App() {
                     onNavigate={navigate}
                   />
                 )}
+                {tab === "adesivos" && <Adesivos reload={reload} />}
                 {tab === "entrada" && (
                   <TelaEntrada produtos={data.produtos} reload={reload} />
                 )}
