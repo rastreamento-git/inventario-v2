@@ -1,0 +1,72 @@
+.adhesive-screen {
+  min-width: 0;
+}
+.adhesive-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: end;
+}
+.adhesive-form label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.adhesive-form select,
+.adhesive-form input {
+  width: 100%;
+  min-width: 0;
+}
+.adhesive-form button {
+  grid-column: 1/-1;
+  justify-self: start;
+  min-width: 220px;
+  width: auto;
+}
+.adhesive-screen .adhesive-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--ep-border, rgba(148, 163, 184, 0.2));
+  border-radius: 12px;
+}
+.adhesive-screen table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.adhesive-screen th,
+.adhesive-screen td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ep-border, rgba(148, 163, 184, 0.14));
+  line-height: 1.5;
+}
+.adhesive-screen th {
+  background: rgba(92, 130, 180, 0.1);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.adhesive-screen tr:last-child td {
+  border-bottom: 0;
+}
+.adhesive-screen tbody tr:hover {
+  background: rgba(92, 130, 180, 0.05);
+}
+.adhesive-screen td {
+  font-size: 13px;
+}
+.adhesive-history {
+  min-width: 620px;
+}
+@media (max-width: 700px) {
+  .adhesive-form {
+    grid-template-columns: 1fr;
+  }
+  .adhesive-form button {
+    width: 100%;
+    min-width: 0;
+  }
+  .adhesive-screen th,
+  .adhesive-screen td {
+    padding: 10px 12px;
+  }
+}
