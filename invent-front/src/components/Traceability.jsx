@@ -32,6 +32,7 @@ const states = {
 const actions = {
   ENTRADA_MATRIZ: "Entrada na matriz",
   CARGA_TECNICO: "Entregue ao técnico",
+  ENTRADA_DIRETA_TECNICO: "Cadastro direto na carga (sem entrada na matriz)",
   USO_FINAL: "Instalação",
   DEVOLUCAO_TECNICO: "Devolução à matriz",
   ESTORNO_MATRIZ: "Entrada cancelada",

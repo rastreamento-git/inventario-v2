@@ -240,6 +240,9 @@ function createApp(pool, env = process.env) {
     });
     res.json({ success: true });
   });
+  const assisted=require("./assisted-transfer");
+  app.post("/api/transferencia-assistida/conferir",auth.requireAdmin,async(req,res)=>res.json(await assisted.preview(pool,req.body)));
+  app.post("/api/transferencia-assistida/confirmar",auth.requireAdmin,async(req,res)=>res.json(await assisted.transfer(pool,req.body)));
   for (const action of ["entrada", "transferir", "instalar", "estorno"])
     app.post(`/api/${action}`, async (req, res) =>
       res.json(await move(pool, action, req.body)),

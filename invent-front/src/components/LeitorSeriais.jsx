@@ -28,6 +28,7 @@ export default function LeitorSeriais({
   seriais,
   setSeriais,
   initialCamera = false,
+  onImportBusyChange,
 }) {
   const [mode, setMode] = useState("auto");
   const [hidden, setHidden] = useState(() => document.hidden);
@@ -348,6 +349,7 @@ export default function LeitorSeriais({
       return;
     }
     importing.current = true;
+    onImportBusyChange?.(true);
     setBusy(true);
     const token = generation.current;
     const alive = () => mounted.current && token === generation.current;
@@ -424,6 +426,7 @@ export default function LeitorSeriais({
       if (photoDecoder.current === decoder) photoDecoder.current = null;
       importing.current = false;
       if (alive()) {
+        onImportBusyChange?.(false);
         setBusy(false);
         setProgress("");
       }
@@ -433,18 +436,27 @@ export default function LeitorSeriais({
   async function txt(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (!file || importing.current) return;
     if (file.size > 1024 * 1024) {
       setMessage(`O arquivo TXT deve ter até 1 MB.`);
       return;
     }
     const token = generation.current;
+    importing.current = true;
+    onImportBusyChange?.(true);
+    setBusy(true);
     try {
       const lines = (await file.text()).split(/\r?\n/);
       if (mounted.current && token === generation.current)
         addRef.current(lines);
     } catch {
       if (mounted.current) setMessage(`Não foi possível ler o arquivo TXT.`);
+    } finally {
+      importing.current = false;
+      if (mounted.current && token === generation.current) {
+        onImportBusyChange?.(false);
+        setBusy(false);
+      }
     }
   }
 
