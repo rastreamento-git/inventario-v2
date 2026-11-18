@@ -4,6 +4,7 @@ import { notify, confirmAction } from "../lib/feedback";
 import { mergeSerials } from "../lib/serials";
 import { groupForecast } from "../lib/forecast";
 import TipoEquipamento from "./TipoEquipamento";
+import TransferenciaAssistida from "./TransferenciaAssistida";
 import {
   PackagePlus,
   Truck,
@@ -511,7 +512,6 @@ export function TelaEntrada({ produtos, reload }) {
   );
 }
 
-import TransferenciaAssistida from "./TransferenciaAssistida";
 export function TelaTransferencia(props){
  const [manual,setManual]=useState(false);
  return <div className="space-y-4"><div className="flex gap-2 flex-wrap"><button type="button" className={manual?"border rounded-lg px-4 py-2":"bg-blue-600 text-white rounded-lg px-4 py-2"} onClick={()=>setManual(false)}>Scanner / lista</button><button type="button" className={manual?"bg-blue-600 text-white rounded-lg px-4 py-2":"border rounded-lg px-4 py-2"} onClick={()=>setManual(true)}>Seleção manual</button></div>{manual?<TransferenciaManual {...props}/>:<TransferenciaAssistida {...props}/>}</div>;
