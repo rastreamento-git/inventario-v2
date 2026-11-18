@@ -2,9 +2,9 @@ name: Backend
 on:
   push:
     branches: [main]
-    paths: ["invent-back/**", ".github/workflows/backend.yml"]
+    paths: ["invent-back/**", "invent-front/**", ".github/workflows/backend.yml"]
   pull_request:
-    paths: ["invent-back/**", ".github/workflows/backend.yml"]
+    paths: ["invent-back/**", "invent-front/**", ".github/workflows/backend.yml"]
 permissions:
   contents: read
 jobs:
@@ -35,3 +35,18 @@ jobs:
       - run: npm ci --include=dev
       - run: npm run check
       - run: npm test
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: invent-front
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci --include=dev
+      - run: npm test
+      - run: npm run build
