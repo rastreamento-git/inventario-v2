@@ -91,8 +91,7 @@ export default function Dashboard({
             </span>
             <h2 id="stock-dashboard-title">Visão do estoque</h2>
             <p>
-              Receba equipamentos, distribua cargas e acompanhe cada item pelo
-              IMEI ou serial.
+              Movimente sua carga, confira os saldos e localize equipamentos em um único painel.
             </p>
           </div>
         </div>
@@ -116,9 +115,9 @@ export default function Dashboard({
         </div>
       </section>
 
-      <section aria-labelledby="stock-summary-title">
+      <section aria-labelledby="stock-summary-title" className="stock-summary-section">
         <h3 className="stock-dashboard-section-title" id="stock-summary-title">
-          Resumo do estoque
+          Saldo e recursos da operação
         </h3>
         <div className="stock-overview">
           {stock.map(([label, value, Icon]) => (
@@ -140,7 +139,7 @@ export default function Dashboard({
           className="stock-dashboard-section-title"
           id="stock-installation-title"
         >
-          Instalações por período
+          Produção · instalações por período
         </h3>
         <div className="stat-grid">
           {stats.map(([label, value, caption, color]) => (
