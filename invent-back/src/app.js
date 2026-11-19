@@ -76,6 +76,7 @@ function createApp(pool, env = process.env) {
   );
   configureAdmin(app, pool, auth);
   configureTrace(app, pool);
+  require("./adesivos").configureAdesivos(app, pool);
   const get = (route, sql) =>
     app.get(`/api/${route}`, async (req, res) =>
       res.json((await pool.query(sql)).rows),
@@ -239,6 +240,9 @@ function createApp(pool, env = process.env) {
     });
     res.json({ success: true });
   });
+  const assisted=require("./assisted-transfer");
+  app.post("/api/transferencia-assistida/conferir",auth.requireAdmin,async(req,res)=>res.json(await assisted.preview(pool,req.body)));
+  app.post("/api/transferencia-assistida/confirmar",auth.requireAdmin,async(req,res)=>res.json(await assisted.transfer(pool,req.body)));
   for (const action of ["entrada", "transferir", "instalar", "estorno"])
     app.post(`/api/${action}`, async (req, res) =>
       res.json(await move(pool, action, req.body)),

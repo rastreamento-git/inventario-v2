@@ -90,7 +90,7 @@ beforeEach(async () => {
 test("migration is repeatable, all read routes work and graph has seven zero days", async () => {
   assert.equal(
     (await pool.query("SELECT * FROM schema_migrations")).rows.length,
-    3,
+    6,
   );
   for (const route of [
     "produtos",
@@ -689,4 +689,37 @@ test("operational health and safe errors without exposing database details", asy
     (await request("produtos/nope", undefined, "DELETE")).status,
     400,
   );
+});
+
+test("transferência assistida identifica modelos mistos, ignora duplicidade na carga e registra entrada direta",async()=>{
+ const tracker=await product("NT40"),tag=await product("TAG X","TAG"),t=await tech();
+ await enter(tracker,["00001234"]);await enter(tag,["TAG-A"]);
+ const p=await request("transferencia-assistida/conferir",{tecnico_id:t,seriais:["00001234","TAG-A","NOVO"]});
+ assert.equal(p.status,200);assert.deepEqual(p.body.items.map(r=>r.estado),["matriz","matriz","novo"]);
+ const items=p.body.items.map(r=>({codigo_serial:r.codigo_serial,estado:r.estado,produto_id:r.produto_id||tag}));
+ const body={tecnico_id:t,items,confirmar_entrada_direta:true};
+ assert.equal((await request("transferencia-assistida/confirmar",{...body,confirmar_entrada_direta:false})).status,400);
+ await balances(tracker,1,t,0);await balances(tag,1,t,0);
+ const result=await request("transferencia-assistida/confirmar",body);
+ assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(result.body.transferidos,2);assert.equal(result.body.cadastrados_diretamente,1);
+ await balances(tracker,0,t,1);await balances(tag,0,t,2);
+ const repeat=await request("transferencia-assistida/confirmar",body);
+ assert.equal(repeat.status,200);assert.equal(repeat.body.ja_na_carga,3);assert.equal(repeat.body.total,0);
+ const log=(await pool.query("SELECT m.tipo,m.operador,e.status_anterior,e.status_novo FROM movimentacoes m JOIN eventos_seriais e ON e.movimentacao_id=m.id WHERE e.codigo_serial='NOVO'")).rows;
+ assert.equal(log.length,1);assert.equal(log[0].tipo,"ENTRADA_DIRETA_TECNICO");assert.equal(log[0].status_anterior,null);assert.equal(log[0].status_novo,"TECNICO");assert.ok(log[0].operador);
+});
+test("carga assistida não permite serial de outro técnico, cancelado ou alteração posterior à conferência",async()=>{
+ const p=await product(),a=await tech("A"),b=await tech("B");
+ await enter(p,["X","Y","Z"]);
+ const preview=await request("transferencia-assistida/conferir",{tecnico_id:a,seriais:["X","Y","Z"]});assert.equal(preview.status,200);
+ await request("transferir",{tecnico_id:b,produto_id:p,seriais:["Y"]});
+ await request("estorno",{produto_id:p,seriais:["Z"],tipo_estorno:"MATRIZ"});
+ const check=await request("transferencia-assistida/conferir",{tecnico_id:a,seriais:["X","Y","Z"]});
+ assert.deepEqual(check.body.items.map(x=>x.estado),["matriz","bloqueado","historico"]);
+ const result=await request("transferencia-assistida/confirmar",{tecnico_id:a,items:preview.body.items.map(x=>({codigo_serial:x.codigo_serial,estado:x.estado,produto_id:p}))});
+ assert.equal(result.status,409);await balances(p,1,a,0);await balances(p,1,b,1);
+ const wrong=await request("transferencia-assistida/confirmar",{tecnico_id:a,items:[{codigo_serial:"Z",estado:"novo",produto_id:p}],confirmar_entrada_direta:true});
+ assert.equal(wrong.status,409);
+ const duplicated=await request("transferencia-assistida/conferir",{tecnico_id:a,seriais:["X","X"]});assert.equal(duplicated.status,400);
+ assert.equal((await request("transferencia-assistida/conferir",{tecnico_id:a,seriais:["X"]},"POST",null)).status,401);
 });

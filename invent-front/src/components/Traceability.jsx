@@ -32,6 +32,7 @@ const states = {
 const actions = {
   ENTRADA_MATRIZ: "Entrada na matriz",
   CARGA_TECNICO: "Entregue ao técnico",
+  ENTRADA_DIRETA_TECNICO: "Cadastro direto na carga (sem entrada na matriz)",
   USO_FINAL: "Instalação",
   DEVOLUCAO_TECNICO: "Devolução à matriz",
   ESTORNO_MATRIZ: "Entrada cancelada",
@@ -68,7 +69,9 @@ export default function Traceability({
   produtos,
   refreshToken,
   initialSearch = "",
+  searchRevision = 0,
   reload,
+  onCommand,
 }) {
   const [q, setQ] = useState(initialSearch),
     [debounced, setDebounced] = useState(initialSearch),
@@ -111,8 +114,12 @@ export default function Traceability({
   const detailRequest = useRef(0);
   useEffect(() => {
     setQ(initialSearch);
+    setStatus("TODOS");
+    setCategory("TODOS");
+    setTech("");
+    setArchive("todos");
     setPage(1);
-  }, [initialSearch]);
+  }, [initialSearch, searchRevision]);
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebounced(q);
@@ -289,7 +296,10 @@ export default function Traceability({
             placeholder="IMEI, serial, modelo, tipo, técnico ou operador…"
             maxLength={128}
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (!onCommand(value)) setQ(value);
+            }}
           />
           {loading && <LoaderCircle size={18} className="is-spinning" />}
         </div>
