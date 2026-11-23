@@ -5,6 +5,7 @@ import { mergeSerials } from "../lib/serials";
 import { groupForecast } from "../lib/forecast";
 import TipoEquipamento from "./TipoEquipamento";
 import TransferenciaAssistida from "./TransferenciaAssistida";
+import ComprasSga from "./ComprasSga";
 import {
   PackagePlus,
   Truck,
@@ -949,6 +950,8 @@ export function TelaCompras({ previsao, produtos }) {
   const listaCompras = groupForecast(previsao, produtos);
 
   return (
+    <>
+    <ComprasSga />
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="p-6 border-b bg-gradient-to-r from-blue-50 to-white">
         <h2 className="text-2xl font-bold flex items-center">
@@ -1002,6 +1005,7 @@ export function TelaCompras({ previsao, produtos }) {
         </table>
       </div>
     </div>
+    </>
   );
 }
 

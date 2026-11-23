@@ -6,6 +6,7 @@
   "outputDirectory": "dist",
   "git": {
     "deploymentEnabled": {
+      "feat/painel-sga-compras": false,
       "feat/saldo-matriz-integracao": false,
       "fix/auditoria-inventario-v2": false,
       "feat/ecossistema-homologacao": false
