@@ -15,12 +15,12 @@
     "@electric-sql/pglite": "^0.5.9"
   },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "migrate": "node scripts/migrate.js",
-    "reconcile": "node scripts/reconcile.js",
-    "test": "node --test test/api.test.js test/config.test.js test/legacy.test.js",
-    "check": "node --check server.js && node --check src/app.js && node --check src/inventory.js"
+    "start": "npm --prefix invent-back run start",
+    "dev": "npm --prefix invent-back run dev",
+    "migrate": "npm --prefix invent-back run migrate",
+    "reconcile": "npm --prefix invent-back run reconcile",
+    "test": "npm --prefix invent-back run test",
+    "check": "npm --prefix invent-back run check"
   },
   "keywords": [],
   "author": "",
