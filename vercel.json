@@ -7,6 +7,7 @@
   "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"feat/ecossistema-homologacao\" ]; then exit 0; else exit 1; fi",
   "git": {
     "deploymentEnabled": {
+      "fix/auditoria-inventario-v2": false,
       "feat/ecossistema-homologacao": false
     }
   }
