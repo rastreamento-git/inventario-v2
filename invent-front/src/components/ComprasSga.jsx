@@ -1,10 +1,21 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../lib/api";
+import { useSession } from "../lib/session";
+
+const pendingUrl = "/compras/instalacoes-pendentes";
+const runsUrl = pendingUrl + "/coletas";
+const sgaDate = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const displayDate = (value) => value.split("-").reverse().join("/");
 
 const equipment = {
-  RASTREADOR: "Rastreadores",
-  TAG: "TAGs",
-  PERFURADO: "Adesivos",
+  RASTREADOR: ["rastreador", "rastreadores"],
+  TAG: ["TAG", "TAGs"],
+  PERFURADO: ["adesivo", "adesivos"],
 };
 const states = {
   covered: "Coberto pela carga técnica",
@@ -21,7 +32,7 @@ function units(value) {
   return (
     Object.entries(equipment)
       .filter(([key]) => value[key] > 0)
-      .map(([key, name]) => `${value[key]} ${name.toLowerCase()}`)
+      .map(([key, names]) => `${value[key]} ${names[value[key] === 1 ? 0 : 1]}`)
       .join(" · ") || "Nenhum"
   );
 }
@@ -30,20 +41,67 @@ function technician(value) {
 }
 
 export default function ComprasSga() {
+  const canCollect = useSession()?.papel === "admin";
+  const today = sgaDate.format(new Date());
+  const [start, setStart] = useState(today);
+  const [end, setEnd] = useState(today);
+  const [confirmed, setConfirmed] = useState(false);
+  const [run, setRun] = useState(null);
+  const [starting, setStarting] = useState(false);
+  const [runError, setRunError] = useState("");
   const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
   const [data, setData] = useState(null);
   const [ids, setIds] = useState([]);
   const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const activeRunId = run?.state === "completed" ? run.id : null;
+  const pollingId =
+    run && (["queued", "running"].includes(run.state) || run.retrying)
+      ? run.id
+      : null;
+  const retrying = run?.retrying;
+  const periodDays = (Date.parse(end) - Date.parse(start)) / 86400000 + 1;
+  const validPeriod = periodDays >= 1 && periodDays <= 31 && end <= today;
 
   useEffect(() => {
+    if (!pollingId) return;
+    const controller = new AbortController();
+    let timer;
+    async function poll() {
+      try {
+        const { data: current } = await api.get(`${runsUrl}/${pollingId}`, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        setRunError("");
+        setRun((previous) =>
+          previous?.id === current.id ? current : previous,
+        );
+        if (current.state === "completed") setLoading(true);
+        if (["queued", "running"].includes(current.state) || current.retrying)
+          timer = setTimeout(poll, current.retrying ? 15000 : 5000);
+      } catch (failure) {
+        if (controller.signal.aborted) return;
+        setRunError(errorMessage(failure));
+        timer = setTimeout(poll, 15000);
+      }
+    }
+    timer = setTimeout(poll, retrying ? 15000 : 5000);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [pollingId, retrying]);
+
+  useEffect(() => {
+    if (!activeRunId) return;
     const controller = new AbortController();
     api
-      .get("/compras/instalacoes-pendentes", {
-        params: { page },
+      .get(pendingUrl, {
+        params: { page, coleta: activeRunId },
         signal: controller.signal,
       })
       .then(({ data: queue }) => {
@@ -56,25 +114,56 @@ export default function ComprasSga() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [page, refresh]);
+  }, [activeRunId, page, refresh]);
 
-  function navigate(next) {
+  function resetResults() {
     setData(null);
-    setLoading(true);
     setError("");
     setResult(null);
     setIds([]);
+  }
+
+  function navigate(next) {
+    resetResults();
+    setLoading(true);
     if (next === page) setRefresh((value) => value + 1);
     else setPage(next);
   }
+
+  async function openRun(collect) {
+    if (starting || busy || !validPeriod || (collect && !confirmed)) return;
+    setStarting(true);
+    setRun(null);
+    setRunError("");
+    setPage(1);
+    setLoading(false);
+    resetResults();
+    try {
+      const period = { start, end };
+      const { data: current } = collect
+        ? await api.post(runsUrl, { ...period, confirmed })
+        : await api.get(runsUrl, { params: period });
+      if (collect) setConfirmed(false);
+      setRun(current);
+      if (current.state === "completed") {
+        setLoading(true);
+        setRefresh((value) => value + 1);
+      }
+    } catch (failure) {
+      setRunError(errorMessage(failure));
+    } finally {
+      setStarting(false);
+    }
+  }
+
   async function simulate() {
     setBusy(true);
     setError("");
     setResult(null);
     try {
       const { data: coverage } = await api.post(
-        "/compras/instalacoes-pendentes/cobertura",
-        { ids },
+        pendingUrl + "/cobertura",
+        { ids, coleta: activeRunId },
         { timeout: 185000 },
       );
       setResult(coverage);
@@ -94,19 +183,131 @@ export default function ComprasSga() {
         <h2 className="text-xl font-bold" id="compras-sga-title">
           Instalação Pendente · SGA
         </h2>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={loading || busy}
-          onClick={() => navigate(page)}
-        >
-          Atualizar
-        </button>
+        {activeRunId && (
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={loading || busy}
+            onClick={() => navigate(page)}
+          >
+            Atualizar lista
+          </button>
+        )}
       </div>
-      <p className="mt-2 text-sm">
-        Demanda por atendimento. Selecione até cinco pendências para conferir
-        carga técnica e matriz.
+      <p className="mt-2 text-sm" id="compras-sga-periodo">
+        Informe até 31 dias, pela data de entrada em Instalação Pendente no SGA.
+        {!canCollect && " Um administrador inicia a coleta."}
       </p>
+      <form
+        className="my-4 flex flex-wrap items-end gap-3"
+        aria-describedby="compras-sga-periodo"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void openRun(canCollect);
+        }}
+      >
+        <label className="grid min-w-0 flex-1 gap-1 text-sm sm:flex-none">
+          Data inicial
+          <input
+            className="min-h-11 w-full min-w-0 rounded-lg border border-gray-200 px-3 text-base"
+            type="date"
+            max={today}
+            value={start}
+            required
+            disabled={starting}
+            onChange={(event) => {
+              setStart(event.target.value);
+              setConfirmed(false);
+            }}
+          />
+        </label>
+        <label className="grid min-w-0 flex-1 gap-1 text-sm sm:flex-none">
+          Data final
+          <input
+            className="min-h-11 w-full min-w-0 rounded-lg border border-gray-200 px-3 text-base"
+            type="date"
+            min={start || undefined}
+            max={today}
+            value={end}
+            required
+            disabled={starting}
+            onChange={(event) => {
+              setEnd(event.target.value);
+              setConfirmed(false);
+            }}
+          />
+        </label>
+        {canCollect && (
+          <label className="flex w-full items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              disabled={starting || !validPeriod}
+              onChange={(event) => setConfirmed(event.target.checked)}
+            />
+            Confirmo o período da coleta.
+          </label>
+        )}
+        <div className="flex w-full flex-wrap gap-2">
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={
+              starting ||
+              busy ||
+              !validPeriod ||
+              (canCollect && (!confirmed || Boolean(pollingId)))
+            }
+          >
+            {canCollect ? "Coletar no SGA" : "Ver última coleta"}
+          </button>
+          {canCollect && (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={starting || busy || !validPeriod}
+              onClick={() => void openRun(false)}
+            >
+              Ver última coleta
+            </button>
+          )}
+        </div>
+      </form>
+      {!validPeriod && (
+        <p className="my-3 text-sm">
+          Informe um período válido de até 31 dias, sem datas futuras.
+        </p>
+      )}
+      {starting && <p role="status">Consultando fila do SGA…</p>}
+      {run && (
+        <div className="my-3 text-sm" role="status">
+          <p className="font-semibold">
+            {displayDate(run.start)} a {displayDate(run.end)}
+          </p>
+          {run.state === "queued" && <p>Coleta na fila do ZenControl.</p>}
+          {run.state === "running" && (
+            <p>
+              Consultando o SGA.{" "}
+              {run.days &&
+                `${run.checked_days} de ${run.days} dias consultados.`}
+              {run.matching > 0 &&
+                ` ${run.checked_vehicles} de ${run.matching} veículos verificados.`}
+            </p>
+          )}
+          {run.retrying && (
+            <p>Consulta incompleta. O ZenControl fará uma nova tentativa.</p>
+          )}
+          {run.state === "failed" && !run.retrying && (
+            <p>Coleta incompleta. Confira os detalhes no ZenControl.</p>
+          )}
+          {run.state === "completed" && <p>Coleta concluída.</p>}
+        </div>
+      )}
+      {runError && (
+        <p className="my-3" role="alert">
+          {runError}
+        </p>
+      )}
       {loading && <p role="status">Carregando pendências…</p>}
       {error && (
         <p role="alert" className="my-3">
@@ -117,56 +318,63 @@ export default function ComprasSga() {
         <>
           {data.items.length === 0 ? (
             <p className="my-3">
-              Nenhuma pendência nesta página. A lista usa as coletas do
-              ZenControl.
+              Nenhuma instalação pendente encontrada no período.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr>
-                    <th className="p-2">Selecionar</th>
-                    <th className="p-2">Veículo</th>
-                    <th className="p-2">Classificação SGA</th>
-                    <th className="p-2">Equipamentos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr key={item.id} className="border-b border-gray-200">
-                      <td className="p-2">
-                        <input
-                          type="checkbox"
-                          aria-label={`Selecionar ${item.vehicle}`}
-                          checked={ids.includes(item.id)}
-                          disabled={
-                            busy ||
-                            item.ordered ||
-                            (ids.length >= 5 && !ids.includes(item.id))
-                          }
-                          onChange={(event) => {
-                            const checked = event.target.checked;
-                            setResult(null);
-                            setIds((previous) =>
-                              checked
-                                ? [...previous, item.id]
-                                : previous.filter((id) => id !== item.id),
-                            );
-                          }}
-                        />
-                      </td>
-                      <td className="p-2">{item.vehicle}</td>
-                      <td className="p-2">
-                        {item.classification || "A confirmar"}
-                      </td>
-                      <td className="p-2">
-                        {item.ordered ? "Já possui OS" : units(item.required)}
-                      </td>
+            <>
+              <p className="my-3 text-sm">
+                Selecione até cinco pendências para simular a cobertura pela
+                carga dos técnicos e pelo estoque da matriz.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr>
+                      <th className="p-2">Selecionar</th>
+                      <th className="p-2">Veículo</th>
+                      <th className="hidden p-2 sm:table-cell">
+                        Classificação SGA
+                      </th>
+                      <th className="p-2">Equipamentos</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {data.items.map((item) => (
+                      <tr key={item.id} className="border-b border-gray-200">
+                        <td className="p-2">
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar ${item.vehicle}`}
+                            checked={ids.includes(item.id)}
+                            disabled={
+                              busy ||
+                              item.ordered ||
+                              (ids.length >= 5 && !ids.includes(item.id))
+                            }
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              setResult(null);
+                              setIds((previous) =>
+                                checked
+                                  ? [...previous, item.id]
+                                  : previous.filter((id) => id !== item.id),
+                              );
+                            }}
+                          />
+                        </td>
+                        <td className="p-2">{item.vehicle}</td>
+                        <td className="hidden p-2 sm:table-cell">
+                          {item.classification || "A confirmar"}
+                        </td>
+                        <td className="p-2">
+                          {item.ordered ? "Já possui OS" : units(item.required)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
           <div className="flex flex-wrap gap-3 items-center my-3">
             <button
