@@ -13,9 +13,9 @@ const sgaDate = new Intl.DateTimeFormat("en-CA", {
 const displayDate = (value) => value.split("-").reverse().join("/");
 
 const equipment = {
-  RASTREADOR: "Rastreadores",
-  TAG: "TAGs",
-  PERFURADO: "Adesivos",
+  RASTREADOR: ["rastreador", "rastreadores"],
+  TAG: ["TAG", "TAGs"],
+  PERFURADO: ["adesivo", "adesivos"],
 };
 const states = {
   covered: "Coberto pela carga técnica",
@@ -32,7 +32,7 @@ function units(value) {
   return (
     Object.entries(equipment)
       .filter(([key]) => value[key] > 0)
-      .map(([key, name]) => `${value[key]} ${name.toLowerCase()}`)
+      .map(([key, names]) => `${value[key]} ${names[value[key] === 1 ? 0 : 1]}`)
       .join(" · ") || "Nenhum"
   );
 }
@@ -332,7 +332,9 @@ export default function ComprasSga() {
                     <tr>
                       <th className="p-2">Selecionar</th>
                       <th className="p-2">Veículo</th>
-                      <th className="p-2">Classificação SGA</th>
+                      <th className="hidden p-2 sm:table-cell">
+                        Classificação SGA
+                      </th>
                       <th className="p-2">Equipamentos</th>
                     </tr>
                   </thead>
@@ -361,7 +363,7 @@ export default function ComprasSga() {
                           />
                         </td>
                         <td className="p-2">{item.vehicle}</td>
-                        <td className="p-2">
+                        <td className="hidden p-2 sm:table-cell">
                           {item.classification || "A confirmar"}
                         </td>
                         <td className="p-2">
