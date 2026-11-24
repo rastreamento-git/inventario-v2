@@ -3,5 +3,14 @@
   "framework": "vite",
   "installCommand": "npm ci --include=dev",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "git": {
+    "deploymentEnabled": {
+      "feat/periodo-sga-compras": false,
+      "feat/painel-sga-compras": false,
+      "feat/saldo-matriz-integracao": false,
+      "fix/auditoria-inventario-v2": false,
+      "feat/ecossistema-homologacao": false
+    }
+  }
 }

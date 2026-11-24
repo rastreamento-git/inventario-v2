@@ -4,6 +4,8 @@ import { notify, confirmAction } from "../lib/feedback";
 import { mergeSerials } from "../lib/serials";
 import { groupForecast } from "../lib/forecast";
 import TipoEquipamento from "./TipoEquipamento";
+import TransferenciaAssistida from "./TransferenciaAssistida";
+import ComprasSga from "./ComprasSga";
 import {
   PackagePlus,
   Truck,
@@ -511,7 +513,11 @@ export function TelaEntrada({ produtos, reload }) {
   );
 }
 
-export function TelaTransferencia({
+export function TelaTransferencia(props){
+ const [manual,setManual]=useState(false);
+ return <div className="space-y-4"><div className="flex gap-2 flex-wrap"><button type="button" className={manual?"border rounded-lg px-4 py-2":"bg-blue-600 text-white rounded-lg px-4 py-2"} onClick={()=>setManual(false)}>Scanner / lista</button><button type="button" className={manual?"bg-blue-600 text-white rounded-lg px-4 py-2":"border rounded-lg px-4 py-2"} onClick={()=>setManual(true)}>Seleção manual</button></div>{manual?<TransferenciaManual {...props}/>:<TransferenciaAssistida {...props}/>}</div>;
+}
+function TransferenciaManual({
   produtos,
   tecnicos,
   imeisGlobais,
@@ -944,6 +950,8 @@ export function TelaCompras({ previsao, produtos }) {
   const listaCompras = groupForecast(previsao, produtos);
 
   return (
+    <>
+    <ComprasSga />
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="p-6 border-b bg-gradient-to-r from-blue-50 to-white">
         <h2 className="text-2xl font-bold flex items-center">
@@ -997,6 +1005,7 @@ export function TelaCompras({ previsao, produtos }) {
         </table>
       </div>
     </div>
+    </>
   );
 }
 
@@ -1270,7 +1279,7 @@ export function TelaLogs({ logs }) {
                 <td className="p-4">
                   {new Date(log.data).toLocaleString("pt-BR")}
                 </td>
-                <td className="p-4 font-bold">{log.tipo}</td>
+                <td className="p-4 font-bold">{log.tipo==="ENTRADA_DIRETA_TECNICO"?"Entrada direta na carga":log.tipo}</td>
                 <td className="p-4">{log.produto}</td>
                 <td className="p-4">{log.tecnico || "-"}</td>
                 <td className="p-4 text-center font-bold">{log.quantidade}</td>
